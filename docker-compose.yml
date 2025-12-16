@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  hysteria:
+    build: .
+    container_name: hysteria2-server
+    restart: unless-stopped
+    ports:
+      - "1443:443/tcp"
+      - "1443:443/udp"
+    volumes:
+      - ./config.yaml:/etc/hysteria/config.yaml:ro
+      # 如果需要持久化证书，可以使用 volume
+      # - ./certs:/etc/hysteria:rw
+    networks:
+      - hysteria-net
+    # 如果需要查看日志
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  hysteria-net:
+    driver: bridge
