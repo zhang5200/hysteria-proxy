@@ -20,3 +20,8 @@ masquerade:
   proxy:
     url: https://bing.com #伪装网址
     rewriteHost: true
+
+# 流量统计 API 配置
+trafficStats:
+  listen: :8080 # API 监听端口
+  secret: zx8257686@520 # API 访问密钥,调用时需在请求头添加 Authorization

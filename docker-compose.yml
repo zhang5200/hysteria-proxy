@@ -8,6 +8,7 @@ services:
     ports:
       - "1443:443/tcp"
       - "1443:443/udp"
+      - "8080:8080" # 流量统计 API 端口
     volumes:
       - ./config.yaml:/etc/hysteria/config.yaml:ro
       # 如果需要持久化证书，可以使用 volume
