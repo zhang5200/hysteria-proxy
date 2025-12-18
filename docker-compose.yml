@@ -8,7 +8,7 @@ services:
     ports:
       - "1443:443/tcp"
       - "1443:443/udp"
-      - "8080:8080" # 流量统计 API 端口
+      - "8081:8081" # 流量统计 API 端口
     volumes:
       - ./config.yaml:/etc/hysteria/config.yaml:ro
       # 如果需要持久化证书，可以使用 volume
@@ -21,6 +21,19 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  auth-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    container_name: hysteria-auth
+    restart: always
+    networks:
+      - hysteria-net
+    ports:
+      - "8080:8080" # Exposed for testing, internally Hysteria uses http://auth-server:8080
+    volumes:
+      - ./data:/app/data
 
 networks:
   hysteria-net:

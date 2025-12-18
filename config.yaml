@@ -12,8 +12,10 @@ tls:
   key: /etc/hysteria/server.key
 
 auth:
-  type: password
-  password: zx8257686@520 #设置认证密码
+  type: http
+  http:
+    url: http://auth-server:8080/auth
+    timeout: 5s
 
 masquerade:
   type: proxy
@@ -23,5 +25,5 @@ masquerade:
 
 # 流量统计 API 配置
 trafficStats:
-  listen: :8080 # API 监听端口
-  secret: zx8257686@520 # API 访问密钥,调用时需在请求头添加 Authorization
+  listen: :8081 # 修改端口以避免与 Auth Server 冲突
+  secret: zx8257686@520 # API 访问密钥
