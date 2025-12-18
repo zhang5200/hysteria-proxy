@@ -90,7 +90,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	// Strategy: Auth string is "username:password"
 	username, password, ok := parseAuth(req.Auth)
 	log.Printf("Auth parsed: username=%s, password=***, ok=%v, raw_auth_len=%d", username, ok, len(req.Auth))
-	
+
 	if !ok {
 		log.Printf("Invalid auth format. Raw auth: %s", req.Auth)
 		http.Error(w, "Invalid auth format. Use 'username:password'", http.StatusUnauthorized)
@@ -99,7 +99,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 	var storedPassword string
 	var enabled bool
-	
+
 	err := db.QueryRow("SELECT password, enabled FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled)
 	if err == sql.ErrNoRows {
 		log.Printf("User not found: %s", username)
@@ -124,9 +124,16 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Auth successful for user: %s", username)
-	// IMPORTANT: Return the username so Hysteria logs traffic under this user
+	// IMPORTANT: Return JSON response as required by Hysteria2 HTTP auth protocol
+	// The "id" field is used by Hysteria for traffic logging
+	response := map[string]interface{}{
+		"ok": true,
+		"id": username,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(username)) 
+	json.NewEncoder(w).Encode(response)
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {
@@ -178,7 +185,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch Traffic Stats from Hysteria
 	trafficStats := fetchTrafficStats()
-	
+
 	// Merge Stats
 	for i := range users {
 		if stats, ok := trafficStats[users[i].Username]; ok {
