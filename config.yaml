@@ -7,12 +7,19 @@ listen: :443 #监听端口
 tls:
   cert: /etc/hysteria/server.crt
   key: /etc/hysteria/server.key
+  alpn: ["h3"]
 
 auth:
   type: http
   http:
     url: http://127.0.0.1:8080/auth
     timeout: 5s
+
+masquerade:
+  type: proxy
+  proxy:
+    url: https://bing.com #伪装网址
+    rewriteHost: true
 
 # 流量统计 API 配置
 trafficStats:
