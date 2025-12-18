@@ -1,3 +1,6 @@
+log:
+  level: debug
+
 listen: :443 #监听端口
 
 #使用 CA 证书

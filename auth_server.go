@@ -72,24 +72,27 @@ type AuthRequest struct {
 // ------ Handlers ------
 
 func authHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received auth request from %s", r.RemoteAddr)
+
 	if r.Method != http.MethodPost {
+		log.Printf("Invalid method: %s", r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
 	var req AuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Failed to decode body: %v", err)
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
 	// Strategy: Auth string is "username:password"
 	username, password, ok := parseAuth(req.Auth)
+	log.Printf("Auth parsed: username=%s, password=***, ok=%v, raw_auth_len=%d", username, ok, len(req.Auth))
+	
 	if !ok {
-		// Fallback: Check if auth string matches a password for any user (Legacy/Simple mode)
-		// But for multi-user correctness, we should enforce user:pass or look up by token.
-		// For this implementation, we enforce "username:password" OR we treat the whole string as password if unique.
-		// Let's stick to username:password for clarity.
+		log.Printf("Invalid auth format. Raw auth: %s", req.Auth)
 		http.Error(w, "Invalid auth format. Use 'username:password'", http.StatusUnauthorized)
 		return
 	}
@@ -99,23 +102,28 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	
 	err := db.QueryRow("SELECT password, enabled FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled)
 	if err == sql.ErrNoRows {
+		log.Printf("User not found: %s", username)
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
 	} else if err != nil {
+		log.Printf("Database error: %v", err)
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
 
 	if !enabled {
+		log.Printf("User disabled: %s", username)
 		http.Error(w, "User is disabled", http.StatusForbidden)
 		return
 	}
 
 	if storedPassword != password {
+		log.Printf("Password mismatch for user: %s. Provided: %s, Stored: %s", username, password, storedPassword)
 		http.Error(w, "Invalid password", http.StatusUnauthorized)
 		return
 	}
 
+	log.Printf("Auth successful for user: %s", username)
 	// IMPORTANT: Return the username so Hysteria logs traffic under this user
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(username)) 
