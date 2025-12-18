@@ -19,7 +19,7 @@ var content embed.FS
 // Configuration
 const (
 	DBPath             = "./data/users.db"
-	HysteriaTrafficAPI = "http://hysteria2-server:8081/traffic"
+	HysteriaTrafficAPI = "http://127.0.0.1:8081/traffic"
 	HysteriaSecret     = "zx8257686@520" // Should match config.yaml
 )
 

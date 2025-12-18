@@ -11,7 +11,7 @@ tls:
 auth:
   type: http
   http:
-    url: http://auth-server:8080/auth
+    url: http://127.0.0.1:8080/auth
     timeout: 5s
 
 # 流量统计 API 配置

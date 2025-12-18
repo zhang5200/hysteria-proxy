@@ -1,20 +1,26 @@
+FROM golang:1.24-alpine AS auth-builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY auth_server.go index.html ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/auth-server auth_server.go
+
 FROM debian:bookworm-slim
 
-# 安装必要的工具
 RUN apt-get update && \
-    apt-get install -y curl openssl ca-certificates && \
+    apt-get install -y curl openssl ca-certificates libcap2-bin && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# 创建 hysteria 用户和目录
 RUN useradd -r -s /bin/false hysteria && \
-    mkdir -p /etc/hysteria
+    mkdir -p /etc/hysteria /app/data
 
-# 下载并安装 Hysteria2
+WORKDIR /app
+
 RUN bash -c "$(curl -fsSL https://get.hy2.sh/)" && \
     chmod +x /usr/local/bin/hysteria
 
-# 生成自签证书
 RUN openssl ecparam -name prime256v1 -out /tmp/ecparam.pem && \
     openssl req -x509 -nodes -newkey ec:/tmp/ecparam.pem \
     -keyout /etc/hysteria/server.key \
@@ -24,14 +30,13 @@ RUN openssl ecparam -name prime256v1 -out /tmp/ecparam.pem && \
     rm /tmp/ecparam.pem && \
     chown hysteria:hysteria /etc/hysteria/server.key /etc/hysteria/server.crt
 
-# 复制配置文件
 COPY config.yaml /etc/hysteria/config.yaml
+COPY --from=auth-builder /out/auth-server /usr/local/bin/auth-server
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && \
+    chown -R hysteria:hysteria /app /etc/hysteria && \
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/hysteria || true
 
-# 暴露端口
-EXPOSE 443/tcp 443/udp 8080
+EXPOSE 443/tcp 443/udp 8080 8081
 
-# 使用 hysteria 用户运行
-USER hysteria
-
-# 直接运行 hysteria server (不使用 systemctl)
-CMD ["/usr/local/bin/hysteria", "server", "-c", "/etc/hysteria/config.yaml"]
+ENTRYPOINT ["/entrypoint.sh"]

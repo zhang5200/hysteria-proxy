@@ -3,71 +3,196 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hysteria User Management</title>
+    <title>Hysteria 控制面板</title>
     <style>
+      :root {
+        --bg-color: #f8fafc;
+        --card-bg: rgba(255, 255, 255, 0.9);
+        --text-primary: #1e293b;
+        --text-secondary: #64748b;
+        --accent-color: #0ea5e9;
+        --accent-glow: rgba(14, 165, 233, 0.2);
+        --success-color: #10b981;
+        --danger-color: #ef4444;
+        --warning-color: #f59e0b;
+        --border-color: rgba(226, 232, 240, 0.8);
+      }
+
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-        background: #f0f2f5;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: var(--bg-color);
+        background-image: 
+          radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.05) 0px, transparent 50%),
+          radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.05) 0px, transparent 50%);
+        color: var(--text-primary);
         margin: 0;
         padding: 20px;
+        min-height: 100vh;
       }
+
       .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        max-width: 1200px;
+        margin: 40px auto;
+        background: var(--card-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        padding: 30px;
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
       }
+
       h1 {
-        margin-bottom: 20px;
-        color: #333;
+        margin: 0;
+        font-size: 24px;
+        font-weight: 600;
+        background: linear-gradient(to right, #0ea5e9, #6366f1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.5px;
       }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
       table {
         width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
+        border-collapse: separate;
+        border-spacing: 0;
+        margin-top: 10px;
       }
-      th,
-      td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-      }
+
       th {
-        background-color: #f8f9fa;
+        text-align: left;
+        padding: 16px;
+        color: var(--text-secondary);
         font-weight: 600;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 1px solid var(--border-color);
       }
+      
+      th svg {
+        vertical-align: text-bottom;
+        margin-right: 4px;
+        width: 16px;
+        height: 16px;
+      }
+
+      td {
+        padding: 16px;
+        border-bottom: 1px solid var(--border-color);
+        vertical-align: middle;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      tr:hover td {
+        background: rgba(241, 245, 249, 0.5);
+      }
+
       .btn {
         padding: 8px 16px;
         border: none;
-        border-radius: 4px;
+        border-radius: 8px;
         cursor: pointer;
-        color: white;
-        margin-right: 5px;
+        font-weight: 500;
+        font-size: 14px;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
       }
+
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn:active {
+        transform: translateY(0);
+      }
+
       .btn-primary {
-        background-color: #007bff;
+        background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%);
+        color: white;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
       }
+
+      .btn-primary:hover {
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+      }
+
       .btn-danger {
-        background-color: #dc3545;
+        background: rgba(254, 226, 226, 0.5);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
       }
+
+      .btn-danger:hover {
+        background: rgba(254, 226, 226, 0.8);
+      }
+
       .btn-success {
-        background-color: #28a745;
+        background: rgba(220, 252, 231, 0.5);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
       }
+
+      .btn-success:hover {
+        background: rgba(220, 252, 231, 0.8);
+      }
+
       .btn-warning {
-        background-color: #ffc107;
-        color: #333;
+        background: rgba(254, 243, 199, 0.5);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
       }
+
+      .btn-warning:hover {
+        background: rgba(254, 243, 199, 0.8);
+      }
+
+      .status-badge {
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+
       .status-enabled {
-        color: green;
-        font-weight: bold;
+        background: rgba(220, 252, 231, 0.5);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
       }
+
       .status-disabled {
-        color: red;
-        font-weight: bold;
+        background: rgba(254, 226, 226, 0.5);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
       }
+
+      .traffic-stat {
+        font-family: 'SF Mono', 'Roboto Mono', monospace;
+        font-size: 13px;
+        color: var(--text-secondary);
+      }
+
+      .traffic-up { color: #0ea5e9; }
+      .traffic-down { color: #10b981; }
+
+      /* Modal */
       .modal {
         display: none;
         position: fixed;
@@ -75,54 +200,104 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 1000;
       }
+
       .modal-content {
-        background: white;
+        background: #ffffff;
         width: 400px;
-        padding: 20px;
+        padding: 30px;
         margin: 100px auto;
-        border-radius: 8px;
+        border-radius: 16px;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        animation: modalSlideIn 0.3s ease-out;
       }
+
+      @keyframes modalSlideIn {
+        from { transform: translateY(-20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+
+      .modal h2 {
+        margin-top: 0;
+        color: var(--text-primary);
+        font-size: 20px;
+        margin-bottom: 24px;
+      }
+
       .form-group {
-        margin-bottom: 15px;
+        margin-bottom: 20px;
       }
+
       label {
         display: block;
-        margin-bottom: 5px;
+        margin-bottom: 8px;
+        color: var(--text-secondary);
+        font-size: 14px;
       }
+
       input {
         width: 100%;
-        padding: 8px;
+        padding: 10px 12px;
         box-sizing: border-box;
-        border: 1px solid #ddd;
-        border-radius: 4px;
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 14px;
+        transition: border-color 0.2s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.1);
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 30px;
       }
     </style>
   </head>
   <body>
     <div class="container">
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        "
-      >
-        <h1>Hysteria Users</h1>
+      <div class="header">
+        <h1>Hysteria 控制面板</h1>
         <button class="btn btn-primary" onclick="showAddModal()">
-          + Add User
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+          添加用户
         </button>
       </div>
 
       <table>
         <thead>
           <tr>
-            <th>Username</th>
-            <th>Password</th>
-            <th>Status</th>
-            <th>Traffic (Up/Down)</th>
-            <th>Actions</th>
+            <th>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+              用户名
+            </th>
+            <th>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11.54 17.256l-1.86.538-.538 1.86-2.272 2.272a2.456 2.456 0 01-3.474-3.474l2.272-2.272 1.86-.538.538-1.86 2.486-1.576A6 6 0 015 9a6 6 0 0112 0z"></path></svg>
+              密码
+            </th>
+            <th>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              状态
+            </th>
+            <th>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+              实时流量 (上行/下行)
+            </th>
+            <th>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+              操作
+            </th>
           </tr>
         </thead>
         <tbody id="userTable">
@@ -134,19 +309,55 @@
     <!-- Modal -->
     <div id="userModal" class="modal">
       <div class="modal-content">
-        <h2 id="modalTitle">Add User</h2>
+        <h2 id="modalTitle">添加用户</h2>
         <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="usernameInput" />
+          <label>用户名</label>
+          <input type="text" id="usernameInput" placeholder="输入用户名" />
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input type="text" id="passwordInput" />
+          <label>密码</label>
+          <input type="text" id="passwordInput" placeholder="输入密码" />
         </div>
-        <div style="text-align: right">
-          <button class="btn btn-warning" onclick="closeModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="saveUser()">Save</button>
+        <div class="modal-actions">
+          <button class="btn btn-warning" onclick="closeModal()">取消</button>
+          <button class="btn btn-primary" onclick="saveUser()">保存</button>
         </div>
+      </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal" style="backdrop-filter: blur(20px); z-index: 2000;">
+      <div class="modal-content" style="margin-top: 15vh;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <svg width="80" height="80" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="48" stroke="url(#logo_grad1)" stroke-width="1" stroke-dasharray="8 8" opacity="0.3">
+              <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="30s" repeatCount="indefinite"/>
+            </circle>
+            <path d="M50 25L71.65 37.5V62.5L50 75L28.35 62.5V37.5L50 25Z" stroke="url(#logo_grad2)" stroke-width="3" fill="rgba(14, 165, 233, 0.05)"/>
+            <path d="M50 25V50M50 50L71.65 62.5M50 50L28.35 62.5" stroke="url(#logo_grad2)" stroke-width="2"/>
+            <circle cx="50" cy="50" r="4" fill="#0ea5e9">
+              <animate attributeName="opacity" values="0.5;1;0.5" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <defs>
+              <linearGradient id="logo_grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0ea5e9" />
+                <stop offset="100%" stop-color="#6366f1" />
+              </linearGradient>
+              <linearGradient id="logo_grad2" x1="50" y1="25" x2="50" y2="75" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0ea5e9"/>
+                <stop offset="1" stop-color="#6366f1"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h2 style="text-align: center; margin-bottom: 30px; background: linear-gradient(to right, #0ea5e9, #6366f1); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">系统登录</h2>
+        <div class="form-group">
+          <label>访问密码</label>
+          <input type="password" id="loginPassword" placeholder="请输入访问密码" onkeyup="if(event.key === 'Enter') checkLogin()"/>
+        </div>
+        <button class="btn btn-primary" onclick="checkLogin()" style="width: 100%; justify-content: center; padding: 12px;">
+          登录系统
+        </button>
       </div>
     </div>
 
@@ -178,16 +389,18 @@
         users.forEach((user) => {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-                    <td>${user.username}</td>
-                    <td>${user.password}</td>
-                    <td class="${
-                      user.enabled ? "status-enabled" : "status-disabled"
-                    }">
-                        ${user.enabled ? "Active" : "Disabled"}
-                    </td>
+                    <td style="font-weight: 500; color: var(--text-primary);">${user.username}</td>
+                    <td style="font-family: monospace; color: var(--text-secondary);">${user.password}</td>
                     <td>
-                        ↑ ${formatBytes(user.tx)} <br>
-                        ↓ ${formatBytes(user.rx)}
+                        <span class="status-badge ${
+                          user.enabled ? "status-enabled" : "status-disabled"
+                        }">
+                            ${user.enabled ? "活跃" : "已禁用"}
+                        </span>
+                    </td>
+                    <td class="traffic-stat">
+                        <span class="traffic-up">↑ ${formatBytes(user.tx)}</span> <br>
+                        <span class="traffic-down">↓ ${formatBytes(user.rx)}</span>
                     </td>
                     <td>
                         <button class="btn ${
@@ -196,11 +409,17 @@
                             onclick="toggleUser(${
                               user.id
                             }, ${!user.enabled}, '${user.password}')">
-                            ${user.enabled ? "Disable" : "Enable"}
+                            ${user.enabled ? 
+                              `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 禁用` : 
+                              `<svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 启用`
+                            }
                         </button>
                         <button class="btn btn-danger" onclick="deleteUser(${
                           user.id
-                        })">Delete</button>
+                        })">
+                          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                          删除
+                        </button>
                     </td>
                 `;
           tbody.appendChild(tr);
@@ -211,7 +430,7 @@
         const username = document.getElementById("usernameInput").value;
         const password = document.getElementById("passwordInput").value;
 
-        if (!username || !password) return alert("Please fill in all fields");
+        if (!username || !password) return alert("请填写所有字段");
 
         try {
           await fetch(API_URL, {
@@ -222,12 +441,12 @@
           closeModal();
           loadUsers();
         } catch (err) {
-          alert("Failed to save user");
+          alert("保存用户失败");
         }
       }
 
       async function deleteUser(id) {
-        if (!confirm("Are you sure?")) return;
+        if (!confirm("确定要删除该用户吗？")) return;
         await fetch(`${API_URL}/${id}`, { method: "DELETE" });
         loadUsers();
       }
@@ -243,13 +462,40 @@
 
       function showAddModal() {
         document.getElementById("userModal").style.display = "block";
-        document.getElementById("modalTitle").innerText = "Add User";
+        document.getElementById("modalTitle").innerText = "添加用户";
         document.getElementById("usernameInput").value = "";
         document.getElementById("passwordInput").value = "";
       }
 
       function closeModal() {
         document.getElementById("userModal").style.display = "none";
+      }
+
+      // Authentication
+      const LOGIN_KEY = "hysteria_auth_token";
+      const CORRECT_PASS = "zx8257686@520";
+
+      function checkAuth() {
+        if (sessionStorage.getItem(LOGIN_KEY) === "true") {
+          document.getElementById("loginModal").style.display = "none";
+          loadUsers();
+          setInterval(loadUsers, 10000);
+        } else {
+          document.getElementById("loginModal").style.display = "block";
+        }
+      }
+
+      function checkLogin() {
+        const input = document.getElementById("loginPassword");
+        if (input.value === CORRECT_PASS) {
+          sessionStorage.setItem(LOGIN_KEY, "true");
+          document.getElementById("loginModal").style.display = "none";
+          loadUsers();
+          setInterval(loadUsers, 10000);
+        } else {
+          alert("密码错误");
+          input.value = "";
+        }
       }
 
       // Close modal when clicking outside
@@ -259,9 +505,8 @@
         }
       };
 
-      // Auto refresh every 10 seconds
-      loadUsers();
-      setInterval(loadUsers, 10000);
+      // Initialize
+      checkAuth();
     </script>
   </body>
 </html>
