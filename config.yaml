@@ -1,11 +1,5 @@
 listen: :443 #监听端口
 
-#使用 CA 证书
-#acme:
-# domains:
-# - a.com #你的域名，需要先解析到服务器 ip
-# email: test@sharklasers.com
-
 #使用自签证书
 tls:
   cert: /etc/hysteria/server.crt
@@ -16,12 +10,6 @@ auth:
   http:
     url: http://auth-server:8080/auth
     timeout: 5s
-
-masquerade:
-  type: proxy
-  proxy:
-    url: https://bing.com #伪装网址
-    rewriteHost: true
 
 # 流量统计 API 配置
 trafficStats:

@@ -116,9 +116,16 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// IMPORTANT: Return the username so Hysteria logs traffic under this user
+	// IMPORTANT: Return JSON response as required by Hysteria2 HTTP auth protocol
+	// The "id" field is used by Hysteria for traffic logging
+	response := map[string]interface{}{
+		"ok": true,
+		"id": username,
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(username)) 
+	json.NewEncoder(w).Encode(response)
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {

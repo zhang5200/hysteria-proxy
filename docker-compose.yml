@@ -5,6 +5,8 @@ services:
     build: .
     container_name: hysteria2-server
     restart: unless-stopped
+    environment:
+      - HYSTERIA_LOG_LEVEL=debug  # 启用 debug 日志以排查连接问题
     ports:
       - "1443:443/tcp"
       - "1443:443/udp"
