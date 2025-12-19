@@ -240,7 +240,7 @@
         
         .btn svg { width: 16px; height: 16px; }
 
-        .btn-primary { background: var(--primary); box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39); }
+        .btn-primary { background: var(--primary);}
         .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
 
         .btn-danger { background: white; color: var(--danger); border: 1px solid var(--border); }
@@ -513,6 +513,7 @@
         let users = [];
         let nodes = [];
         let trafficByNode = {};
+        let editingUserId = null; // Track if we're editing a user
 
         // --- Auth Logic ---
         function checkLogin() {
@@ -668,6 +669,12 @@
                     ${trafficHtml}
 
                     <div class="card-actions">
+                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; background: white; color: var(--primary); border: 1px solid var(--border);" onclick="showEditUserModal(${user.id}, '${user.username}', '${user.password}')">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            编辑
+                        </button>
                         <button class="btn ${user.enabled ? 'btn-danger' : 'btn-success'}" style="padding: 6px 12px; font-size: 12px;" onclick="toggleUser(${user.id}, ${!user.enabled}, '${user.password}')">
                             ${user.enabled ? '禁用' : '启用'}
                         </button>
@@ -684,8 +691,23 @@
             const p = document.getElementById("passwordInput").value;
             if(!u || !p) return alert("请填写完整");
             try {
-                await fetch(USER_API, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({username:u, password:p}) });
-                closeUserModal(); loadUsers();
+                if (editingUserId) {
+                    // Update existing user
+                    await fetch(`${USER_API}/${editingUserId}`, { 
+                        method: "PUT", 
+                        headers: {"Content-Type":"application/json"}, 
+                        body: JSON.stringify({username:u, password:p, enabled: true}) 
+                    });
+                } else {
+                    // Create new user
+                    await fetch(USER_API, { 
+                        method: "POST", 
+                        headers: {"Content-Type":"application/json"}, 
+                        body: JSON.stringify({username:u, password:p}) 
+                    });
+                }
+                closeUserModal(); 
+                loadUsers();
             } catch(e) { alert("操作失败"); }
         }
 
@@ -764,11 +786,25 @@
 
         // --- Modal Helpers ---
         function showAddUserModal() {
+            editingUserId = null;
+            document.getElementById("userModalTitle").innerText = "添加用户";
             document.getElementById("userModal").classList.add("active");
-            document.getElementById("passwordInput").value = "zx8257686@520"; 
             document.getElementById("usernameInput").value = "";
+            document.getElementById("passwordInput").value = "zx8257686@520"; 
         }
-        function closeUserModal() { document.getElementById("userModal").classList.remove("active"); }
+        
+        function showEditUserModal(id, username, password) {
+            editingUserId = id;
+            document.getElementById("userModalTitle").innerText = "编辑用户";
+            document.getElementById("userModal").classList.add("active");
+            document.getElementById("usernameInput").value = username;
+            document.getElementById("passwordInput").value = password;
+        }
+        
+        function closeUserModal() { 
+            editingUserId = null;
+            document.getElementById("userModal").classList.remove("active"); 
+        }
 
         function showAddNodeModal() {
             document.getElementById("nodeModal").classList.add("active");
@@ -778,14 +814,8 @@
         }
         function closeNodeModal() { document.getElementById("nodeModal").classList.remove("active"); }
 
-        // Interval
-        setInterval(() => {
-             if (document.getElementById('mainApp').style.opacity === '1') {
-                 if(document.querySelector('.tab-btn.active').innerText.includes('用户')) refreshUsers();
-                 else loadNodes();
-             }
-        }, 10000);
-
+        // Removed auto-refresh interval - only refresh on page load or user actions
+        
         async function refreshUsers() {
             await loadTrafficByNode();
             await loadUsers();

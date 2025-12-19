@@ -3,57 +3,46 @@ version: "3.8"
 services:
   # 认证服务器
   auth-server:
-    image: hysteria-auth:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.auth
+    container_name: hysteria-auth
     networks:
       - hysteria-net
     ports:
       - "8080:8080"
     volumes:
-      - auth-data:/app/data
-    deploy:
-      replicas: 1
-      placement:
-        constraints:
-          # 直接使用节点 ID 锁定到 66.154.105.113 所在的机器
-          # 假设 zzx.ai.com 是你的主节点
-          - node.id == 9xsywa43991p65xzubuo1hysa
-      restart_policy:
-        condition: on-failure
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
 
   # Hysteria 代理服务
   hysteria-proxy:
-    image: hysteria-proxy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hysteria-proxy
+    depends_on:
+      - auth-server
     environment:
       - HYSTERIA_LOG_LEVEL=debug
-    # 使用 host 模式发布端口以获得最佳性能
+      - TZ=Asia/Shanghai
     ports:
-      - target: 443
-        published: 1443
-        protocol: tcp
-        mode: host
-      - target: 443
-        published: 1443
-        protocol: udp
-        mode: host
-      - target: 8081
-        published: 8081
-        protocol: tcp
-        mode: host
+      # Hysteria 主端口 (TCP + UDP)
+      - "1443:443/tcp"
+      - "1443:443/udp"
+      # 管理 API 端口
+      - "8081:8081/tcp"
     networks:
       - hysteria-net
-    deploy:
-      mode: global
-      placement:
-        constraints:
-          # 仅在打过 hysteria=true 标签的节点上运行
-          - node.labels.hysteria == true
-      restart_policy:
-        condition: on-failure
+    volumes:
+      - ./config.yaml:/etc/hysteria/config.yaml:ro
+    restart: unless-stopped
 
 networks:
   hysteria-net:
-    driver: overlay
-    attachable: true
+    driver: bridge
 
 volumes:
   auth-data:
