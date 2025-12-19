@@ -346,7 +346,7 @@
 
         .traffic-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
             gap: 16px;
             margin-top: 15px;
         }
@@ -359,6 +359,7 @@
             border-radius: 8px;
             background: #fdfdfd;
             transition: var(--transition);
+            min-width: 0; /* Allow flex items to shrink below content size */
         }
         .node-item:hover {
             border-color: var(--primary);
@@ -630,9 +631,9 @@
                      trafficHtml = '<div class="traffic-grid" style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px;">';
                      for (const [node, t] of Object.entries(trafficByNode[user.username])) {
                          trafficHtml += `
-                            <div class="node-item" style="flex-direction:row; justify-content:space-between; align-items:center;">
-                                <span style="font-weight: 500; font-size: 12px;">${node}</span>
-                                <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary);">
+                            <div class="node-item" style="flex-direction:row; justify-content:space-between; align-items:center; gap: 12px; flex-wrap: wrap;">
+                                <span style="font-weight: 500; font-size: 12px; white-space: nowrap;">${node}</span>
+                                <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary); white-space: nowrap;">
                                     <span style="color: var(--success)">↑ ${formatBytes(t.tx)}</span> 
                                     <span style="color: var(--primary)">↓ ${formatBytes(t.rx)}</span>
                                 </span>
@@ -790,7 +791,7 @@
             document.getElementById("userModalTitle").innerText = "添加用户";
             document.getElementById("userModal").classList.add("active");
             document.getElementById("usernameInput").value = "";
-            document.getElementById("passwordInput").value = "zx8257686@520"; 
+            document.getElementById("passwordInput").value = ""; 
         }
         
         function showEditUserModal(id, username, password) {
@@ -808,7 +809,7 @@
 
         function showAddNodeModal() {
             document.getElementById("nodeModal").classList.add("active");
-            document.getElementById("nodeSecretInput").value = "zx8257686@520"; 
+            document.getElementById("nodeSecretInput").value = ""; 
             document.getElementById("nodeNameInput").value = "";
             document.getElementById("nodeHostInput").value = "";
         }
