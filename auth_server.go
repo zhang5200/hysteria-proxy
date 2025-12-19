@@ -35,6 +35,17 @@ type User struct {
 	Rx int64 `json:"rx"`
 }
 
+// Node model (represents a hysteria-proxy instance)
+type Node struct {
+	ID         int       `json:"id"`
+	Name       string    `json:"name"`
+	Host       string    `json:"host"`
+	Secret     string    `json:"secret"`
+	Enabled    bool      `json:"enabled"`
+	CreatedAt  time.Time `json:"created_at"`
+	LastSyncAt *time.Time `json:"last_sync_at,omitempty"`
+}
+
 var db *sql.DB
 
 func initDB() {
@@ -49,7 +60,8 @@ func initDB() {
 		log.Fatal(err)
 	}
 
-	createTableSQL := `CREATE TABLE IF NOT EXISTS users (
+	// Create users table
+	createUsersTableSQL := `CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		username TEXT UNIQUE NOT NULL,
 		password TEXT NOT NULL,
@@ -57,10 +69,50 @@ func initDB() {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 
-	_, err = db.Exec(createTableSQL)
+	_, err = db.Exec(createUsersTableSQL)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Create nodes table (for managing multiple hysteria-proxy instances)
+	createNodesTableSQL := `CREATE TABLE IF NOT EXISTS nodes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT UNIQUE NOT NULL,
+		host TEXT NOT NULL,
+		secret TEXT NOT NULL,
+		enabled BOOLEAN DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		last_sync_at DATETIME
+	);`
+
+	_, err = db.Exec(createNodesTableSQL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Create traffic_stats table (for storing cumulative traffic data from each node)
+	// last_tx/last_rx: 上次从 Hysteria 获取的值（用于检测重启）
+	// tx/rx: 累计总流量（持续增加，不会因 Hysteria 重启而清零）
+	createTrafficStatsTableSQL := `CREATE TABLE IF NOT EXISTS traffic_stats (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		node_id INTEGER NOT NULL,
+		username TEXT NOT NULL,
+		tx INTEGER DEFAULT 0,
+		rx INTEGER DEFAULT 0,
+		last_tx INTEGER DEFAULT 0,
+		last_rx INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(node_id, username),
+		FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
+	);`
+
+	_, err = db.Exec(createTrafficStatsTableSQL)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("Database initialized successfully")
 }
 
 // Hysteria Auth Request
@@ -183,14 +235,29 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		users = append(users, u)
 	}
 
-	// Fetch Traffic Stats from Hysteria
-	trafficStats := fetchTrafficStats()
+	// Fetch aggregated traffic stats from database (across all nodes)
+	trafficRows, err := db.Query(`
+		SELECT username, SUM(tx) as total_tx, SUM(rx) as total_rx
+		FROM traffic_stats
+		GROUP BY username
+	`)
+	if err == nil {
+		defer trafficRows.Close()
+		trafficStats := make(map[string]map[string]int64)
+		for trafficRows.Next() {
+			var username string
+			var tx, rx int64
+			if err := trafficRows.Scan(&username, &tx, &rx); err == nil {
+				trafficStats[username] = map[string]int64{"tx": tx, "rx": rx}
+			}
+		}
 
-	// Merge Stats
-	for i := range users {
-		if stats, ok := trafficStats[users[i].Username]; ok {
-			users[i].Tx = int64(stats["tx"].(float64))
-			users[i].Rx = int64(stats["rx"].(float64))
+		// Merge aggregated stats into users
+		for i := range users {
+			if stats, ok := trafficStats[users[i].Username]; ok {
+				users[i].Tx = stats["tx"]
+				users[i].Rx = stats["rx"]
+			}
 		}
 	}
 
@@ -239,6 +306,178 @@ func deleteUser(w http.ResponseWriter, r *http.Request, id string) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// ------ Node Management Handlers ------
+
+func nodesHandler(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		getNodes(w, r)
+	case http.MethodPost:
+		createNode(w, r)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func nodeDetailHandler(w http.ResponseWriter, r *http.Request) {
+	// Simple path parsing /api/nodes/{id}
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	id := parts[3]
+
+	switch r.Method {
+	case http.MethodPut:
+		updateNode(w, r, id)
+	case http.MethodDelete:
+		deleteNode(w, r, id)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func getNodes(w http.ResponseWriter, r *http.Request) {
+	rows, err := db.Query("SELECT id, name, host, secret, enabled, created_at, last_sync_at FROM nodes")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	nodes := []Node{}
+	for rows.Next() {
+		var n Node
+		if err := rows.Scan(&n.ID, &n.Name, &n.Host, &n.Secret, &n.Enabled, &n.CreatedAt, &n.LastSyncAt); err != nil {
+			continue
+		}
+		nodes = append(nodes, n)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(nodes)
+}
+
+func createNode(w http.ResponseWriter, r *http.Request) {
+	var n Node
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec("INSERT INTO nodes (name, host, secret, enabled) VALUES (?, ?, ?, ?)", 
+		n.Name, n.Host, n.Secret, true)
+	if err != nil {
+		http.Error(w, "Failed to create node (name might be duplicate)", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+func updateNode(w http.ResponseWriter, r *http.Request, id string) {
+	var n Node
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec("UPDATE nodes SET name = ?, host = ?, secret = ?, enabled = ? WHERE id = ?", 
+		n.Name, n.Host, n.Secret, n.Enabled, id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func deleteNode(w http.ResponseWriter, r *http.Request, id string) {
+	_, err := db.Exec("DELETE FROM nodes WHERE id = ?", id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// ------ Traffic Aggregation Handlers ------
+
+func trafficAggregatedHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Aggregate traffic by username across all nodes
+	rows, err := db.Query(`
+		SELECT username, SUM(tx) as total_tx, SUM(rx) as total_rx
+		FROM traffic_stats
+		GROUP BY username
+	`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	result := make(map[string]map[string]int64)
+	for rows.Next() {
+		var username string
+		var tx, rx int64
+		if err := rows.Scan(&username, &tx, &rx); err != nil {
+			continue
+		}
+		result[username] = map[string]int64{
+			"tx": tx,
+			"rx": rx,
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(result)
+}
+
+func trafficByNodeHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get traffic stats grouped by node
+	rows, err := db.Query(`
+		SELECT n.id, n.name, ts.username, ts.tx, ts.rx, ts.updated_at
+		FROM traffic_stats ts
+		JOIN nodes n ON ts.node_id = n.id
+		ORDER BY n.id, ts.updated_at DESC
+	`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type TrafficEntry struct {
+		NodeID     int       `json:"node_id"`
+		NodeName   string    `json:"node_name"`
+		Username   string    `json:"username"`
+		Tx         int64     `json:"tx"`
+		Rx         int64     `json:"rx"`
+		UpdatedAt  time.Time `json:"updated_at"`
+	}
+
+	entries := []TrafficEntry{}
+	for rows.Next() {
+		var e TrafficEntry
+		if err := rows.Scan(&e.NodeID, &e.NodeName, &e.Username, &e.Tx, &e.Rx, &e.UpdatedAt); err != nil {
+			continue
+		}
+		entries = append(entries, e)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(entries)
+}
+
 // ------ Helpers ------
 
 func fetchTrafficStats() map[string]map[string]interface{} {
@@ -270,18 +509,173 @@ func parseAuth(auth string) (string, string, bool) {
 	return "", "", false
 }
 
+// fetchTrafficFromNode fetches traffic stats from a specific node
+func fetchTrafficFromNode(node Node) map[string]map[string]interface{} {
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := "http://" + node.Host + "/traffic"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		log.Printf("Error creating request for node %s: %v", node.Name, err)
+		return nil
+	}
+	req.Header.Set("Authorization", node.Secret)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Error fetching traffic from node %s: %v", node.Name, err)
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		log.Printf("Node %s returned status %d", node.Name, resp.StatusCode)
+		return nil
+	}
+
+	var result map[string]map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		log.Printf("Error decoding traffic from node %s: %v", node.Name, err)
+		return nil
+	}
+	return result
+}
+
+// collectTrafficFromAllNodes periodically collects traffic from all enabled nodes
+func collectTrafficFromAllNodes() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		log.Println("Starting traffic collection from all nodes...")
+
+		// Get all enabled nodes
+		rows, err := db.Query("SELECT id, name, host, secret FROM nodes WHERE enabled = 1")
+		if err != nil {
+			log.Printf("Error querying nodes: %v", err)
+			continue
+		}
+
+		nodes := []Node{}
+		for rows.Next() {
+			var n Node
+			if err := rows.Scan(&n.ID, &n.Name, &n.Host, &n.Secret); err != nil {
+				continue
+			}
+			nodes = append(nodes, n)
+		}
+		rows.Close()
+
+		if len(nodes) == 0 {
+			log.Println("No enabled nodes found")
+			continue
+		}
+
+		// Collect traffic from each node
+		for _, node := range nodes {
+			traffic := fetchTrafficFromNode(node)
+			if traffic == nil {
+				continue
+			}
+
+			// Update cumulative traffic data in database (增量累加模式)
+			for username, stats := range traffic {
+				currentTx := int64(stats["tx"].(float64))
+				currentRx := int64(stats["rx"].(float64))
+
+				// Only process if there's actual traffic
+				if currentTx > 0 || currentRx > 0 {
+					// 获取数据库中的上次值
+					var dbTx, dbRx, lastTx, lastRx int64
+					err := db.QueryRow(
+						"SELECT tx, rx, last_tx, last_rx FROM traffic_stats WHERE node_id = ? AND username = ?",
+						node.ID, username,
+					).Scan(&dbTx, &dbRx, &lastTx, &lastRx)
+
+					var newTx, newRx int64
+					if err == sql.ErrNoRows {
+						// 首次记录，直接使用当前值
+						newTx = currentTx
+						newRx = currentRx
+					} else if err != nil {
+						log.Printf("Error querying traffic for user %s on node %s: %v", username, node.Name, err)
+						continue
+					} else {
+						// 检测 Hysteria 是否重启（当前值 < 上次值）
+						if currentTx < lastTx || currentRx < lastRx {
+							// Hysteria 重启了，只累加当前值（新的增量）
+							newTx = dbTx + currentTx
+							newRx = dbRx + currentRx
+							log.Printf("Detected Hysteria restart for user %s on node %s, adding increment: tx=%d, rx=%d",
+								username, node.Name, currentTx, currentRx)
+						} else {
+							// 正常情况，累加增量（当前值 - 上次值）
+							deltaTx := currentTx - lastTx
+							deltaRx := currentRx - lastRx
+							newTx = dbTx + deltaTx
+							newRx = dbRx + deltaRx
+						}
+					}
+
+					// 更新数据库（保存累计值和当前 Hysteria 的值）
+					_, err = db.Exec(`
+						INSERT INTO traffic_stats (node_id, username, tx, rx, last_tx, last_rx, created_at, updated_at)
+						VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+						ON CONFLICT(node_id, username) 
+						DO UPDATE SET 
+							tx = ?,
+							rx = ?,
+							last_tx = ?,
+							last_rx = ?,
+							updated_at = CURRENT_TIMESTAMP
+					`, node.ID, username, newTx, newRx, currentTx, currentRx,
+						newTx, newRx, currentTx, currentRx)
+
+					if err != nil {
+						log.Printf("Error updating traffic for user %s on node %s: %v", username, node.Name, err)
+					} else {
+						log.Printf("Updated traffic for user %s on node %s: total_tx=%d, total_rx=%d (current: %d/%d)",
+							username, node.Name, newTx, newRx, currentTx, currentRx)
+					}
+				}
+			}
+
+			// Update last_sync_at for the node
+			_, err := db.Exec("UPDATE nodes SET last_sync_at = ? WHERE id = ?", time.Now(), node.ID)
+			if err != nil {
+				log.Printf("Error updating last_sync_at for node %s: %v", node.Name, err)
+			}
+		}
+
+		log.Println("Traffic collection completed")
+	}
+}
+
 // ------ Main ------
 
 func main() {
 	initDB()
 
+	// Start periodic traffic collection in background
+	go collectTrafficFromAllNodes()
+	log.Println("Started periodic traffic collection (every 60 seconds)")
+
 	// Static Files (Embedded)
 	http.Handle("/", http.FileServer(http.FS(content)))
 
-	// API
+	// API - Authentication
 	http.HandleFunc("/auth", authHandler)
+	
+	// API - User Management
 	http.HandleFunc("/api/users", usersHandler)
 	http.HandleFunc("/api/users/", userDetailHandler)
+	
+	// API - Node Management
+	http.HandleFunc("/api/nodes", nodesHandler)
+	http.HandleFunc("/api/nodes/", nodeDetailHandler)
+	
+	// API - Traffic Aggregation
+	http.HandleFunc("/api/traffic/aggregated", trafficAggregatedHandler)
+	http.HandleFunc("/api/traffic/by-node", trafficByNodeHandler)
 
 	log.Println("Auth Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))

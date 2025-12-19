@@ -1,42 +1,60 @@
 version: "3.8"
 
 services:
-  hysteria:
-    build: .
-    container_name: hysteria2-server
-    restart: unless-stopped
-    environment:
-      - HYSTERIA_LOG_LEVEL=debug  # 启用 debug 日志以排查连接问题
-    ports:
-      - "1443:443/tcp"
-      - "1443:443/udp"
-      - "8081:8081" # 流量统计 API 端口
-    volumes:
-      - ./config.yaml:/etc/hysteria/config.yaml:ro
-      # 如果需要持久化证书，可以使用 volume
-      # - ./certs:/etc/hysteria:rw
-    networks:
-      - hysteria-net
-    # 如果需要查看日志
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
+  # 认证服务器
   auth-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.auth
-    container_name: hysteria-auth
-    restart: always
+    image: hysteria-auth:latest
     networks:
       - hysteria-net
     ports:
-      - "8080:8080" # Exposed for testing, internally Hysteria uses http://auth-server:8080
+      - "8080:8080"
     volumes:
-      - ./data:/app/data
+      - auth-data:/app/data
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          # 直接使用节点 ID 锁定到 66.154.105.113 所在的机器
+          # 假设 zzx.ai.com 是你的主节点
+          - node.id == 9xsywa43991p65xzubuo1hysa
+      restart_policy:
+        condition: on-failure
+
+  # Hysteria 代理服务
+  hysteria-proxy:
+    image: hysteria-proxy:latest
+    environment:
+      - HYSTERIA_LOG_LEVEL=debug
+    # 使用 host 模式发布端口以获得最佳性能
+    ports:
+      - target: 443
+        published: 1443
+        protocol: tcp
+        mode: host
+      - target: 443
+        published: 1443
+        protocol: udp
+        mode: host
+      - target: 8081
+        published: 8081
+        protocol: tcp
+        mode: host
+    networks:
+      - hysteria-net
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          # 仅在打过 hysteria=true 标签的节点上运行
+          - node.labels.hysteria == true
+      restart_policy:
+        condition: on-failure
 
 networks:
   hysteria-net:
-    driver: bridge
+    driver: overlay
+    attachable: true
+
+volumes:
+  auth-data:
+    driver: local

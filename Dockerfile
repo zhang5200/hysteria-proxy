@@ -28,7 +28,7 @@ RUN openssl ecparam -name prime256v1 -out /tmp/ecparam.pem && \
 COPY config.yaml /etc/hysteria/config.yaml
 
 # 暴露端口
-EXPOSE 443/tcp 443/udp 8080
+EXPOSE 443/tcp 443/udp 8081
 
 # 使用 hysteria 用户运行
 USER hysteria

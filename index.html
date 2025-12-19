@@ -1,267 +1,795 @@
 <!DOCTYPE html>
-<html lang="zh">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hysteria User Management</title>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hysteria 管理面板</title>
     <style>
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-          "Helvetica Neue", Arial, sans-serif;
-        background: #f0f2f5;
-        margin: 0;
-        padding: 20px;
-      }
-      .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        background: white;
-        padding: 20px;
-        border-radius: 8px;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-      h1 {
-        margin-bottom: 20px;
-        color: #333;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-      }
-      th,
-      td {
-        padding: 12px;
-        text-align: left;
-        border-bottom: 1px solid #ddd;
-      }
-      th {
-        background-color: #f8f9fa;
-        font-weight: 600;
-      }
-      .btn {
-        padding: 8px 16px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        color: white;
-        margin-right: 5px;
-      }
-      .btn-primary {
-        background-color: #007bff;
-      }
-      .btn-danger {
-        background-color: #dc3545;
-      }
-      .btn-success {
-        background-color: #28a745;
-      }
-      .btn-warning {
-        background-color: #ffc107;
-        color: #333;
-      }
-      .status-enabled {
-        color: green;
-        font-weight: bold;
-      }
-      .status-disabled {
-        color: red;
-        font-weight: bold;
-      }
-      .modal {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-      }
-      .modal-content {
-        background: white;
-        width: 400px;
-        padding: 20px;
-        margin: 100px auto;
-        border-radius: 8px;
-      }
-      .form-group {
-        margin-bottom: 15px;
-      }
-      label {
-        display: block;
-        margin-bottom: 5px;
-      }
-      input {
-        width: 100%;
-        padding: 8px;
-        box-sizing: border-box;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <div
-        style="
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        "
-      >
-        <h1>Hysteria Users</h1>
-        <button class="btn btn-primary" onclick="showAddModal()">
-          + Add User
-        </button>
-      </div>
+        :root {
+            --primary: #3b82f6; /* Modern Blue */
+            --primary-dark: #2563eb;
+            --bg-body: #f3f4f6; /* Soft Gray */
+            --bg-card: #ffffff;
+            --text-main: #111827;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --radius: 12px;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --transition: all 0.2s ease;
+        }
 
-      <table>
-        <thead>
-          <tr>
-            <th>Username</th>
-            <th>Password</th>
-            <th>Status</th>
-            <th>Traffic (Up/Down)</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="userTable">
-          <!-- Users will be loaded here -->
-        </tbody>
-      </table>
+        * { box-sizing: border-box; outline: none; }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.3s ease;
+        }
+
+        .login-card {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            animation: slideUp 0.4s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-logo {
+            width: 64px;
+            height: 64px;
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+
+        .login-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: var(--text-main);
+        }
+
+        /* Layout & Common */
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .brand svg {
+            color: var(--primary);
+            width: 32px;
+            height: 32px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            background: transparent;
+            border: none;
+            padding: 10px 20px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: var(--radius);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+        }
+
+        .tab-btn svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn:hover {
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.3s ease; }
+
+        @keyframes fadeIn { from {opacity: 0;} to {opacity: 1;} }
+
+        /* Data Grid (Flex) */
+        .data-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .data-card {
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            flex: 1 1 300px; /* Min width 300px, grow to fill */
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: var(--transition);
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .data-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-weight: 700;
+            font-size: 16px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .card-actions {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px dashed var(--border);
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 600px) {
+            .data-card { flex: 1 1 100%; }
+        }
+
+        /* Buttons & Inputs */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 14px;
+            transition: var(--transition);
+            color: white;
+        }
+        
+        .btn svg { width: 16px; height: 16px; }
+
+        .btn-primary { background: var(--primary); box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39); }
+        .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+
+        .btn-danger { background: white; color: var(--danger); border: 1px solid var(--border); }
+        .btn-danger:hover { background: #fef2f2; border-color: var(--danger); }
+
+        .btn-success { background: white; color: var(--success); border: 1px solid var(--border); }
+        .btn-success:hover { background: #ecfdf5; border-color: var(--success); }
+
+        .btn-icon { padding: 8px; border-radius: 50%; }
+
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-main); }
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: var(--transition);
+        }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+
+        /* Badge/Status */
+        .badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-success { background: #d1fae5; color: #065f46; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(2px);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal.active { display: flex; }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 450px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            animation: scaleIn 0.2s ease;
+        }
+
+        @keyframes scaleIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-title { font-size: 20px; font-weight: 700; margin: 0; }
+        .close-btn { cursor: pointer; color: var(--text-secondary); }
+
+        /* Horizontal Forms */
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            width: 70px; /* Fixed width for labels */
+            margin-bottom: 0;
+            margin-right: 15px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .form-group input {
+            flex-grow: 1;
+        }
+
+        /* Default Vertical for Mobile if needed, but keeping horizontal as requested */
+        
+        /* Details - Horizontal Grid */
+        .detail-row { display: none; }
+        .detail-row.show { display: table-row; }
+        .detail-cell { background: #f9fafb; padding: 0 !important; }
+        
+        .detail-card { 
+            margin: 16px; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 8px; 
+            border: 1px solid var(--border); 
+        }
+
+        .traffic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 15px;
+        }
+        
+        .node-item {
+            display: flex;
+            flex-direction: column;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fdfdfd;
+            transition: var(--transition);
+        }
+        .node-item:hover {
+            border-color: var(--primary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login Overlay -->
+    <div id="login-overlay">
+        <div class="login-card">
+            <svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--primary);">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <div class="login-title">请登录管理面板</div>
+            <div class="input-group">
+                <input type="password" id="loginPassword" placeholder="请输入访问密码..." onkeyup="if(event.key === 'Enter') checkLogin()">
+            </div>
+            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;" onclick="checkLogin()">
+                登录验证
+            </button>
+            <p id="loginError" style="color: var(--danger); margin-top: 10px; display: none; font-size: 14px;">密码错误，请重试</p>
+        </div>
     </div>
 
-    <!-- Modal -->
+    <!-- Main Content -->
+    <div class="container" id="mainApp" style="opacity: 0; transition: opacity 0.5s;">
+        <div class="header">
+            <div class="brand">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Hysteria 面板
+            </div>
+            <div>
+                <button class="btn btn-danger" onclick="logout()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    退出登录
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('users')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                    用户管理
+                </button>
+                <button class="tab-btn" onclick="switchTab('nodes')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    节点管理
+                </button>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="usersTab" class="tab-content active">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px;">用户列表</h3>
+                    <button class="btn btn-primary" onclick="showAddUserModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        添加用户
+                    </button>
+                </div>
+
+                <div class="data-grid" id="userTable">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+
+            <!-- Nodes Tab -->
+            <div id="nodesTab" class="tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px;">节点列表</h3>
+                    <button class="btn btn-primary display flex" onclick="showAddNodeModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        添加节点
+                    </button>
+                </div>
+
+                <div class="data-grid" id="nodeTable">
+                    <!-- Cards injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
     <div id="userModal" class="modal">
-      <div class="modal-content">
-        <h2 id="modalTitle">Add User</h2>
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="usernameInput" />
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="userModalTitle">添加用户</h3>
+                <span class="close-btn" onclick="closeUserModal()">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="usernameInput" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="text" id="passwordInput" placeholder="请输入密码">
+            </div>
+            <div style="text-align: right; margin-top: 24px;">
+                <button class="btn btn-danger" onclick="closeUserModal()" style="margin-right: 8px;">取消</button>
+                <button class="btn btn-primary" onclick="saveUser()">保存用户</button>
+            </div>
         </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="text" id="passwordInput" />
+    </div>
+
+    <div id="nodeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="nodeModalTitle">添加节点</h3>
+                <span class="close-btn" onclick="closeNodeModal()">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>节点名称</label>
+                <input type="text" id="nodeNameInput" placeholder="例如: HongKong-01">
+            </div>
+            <div class="form-group">
+                <label>节点地址</label>
+                <input type="text" id="nodeHostInput" placeholder="例如: 192.168.1.1:8080">
+            </div>
+            <div class="form-group">
+                <label>访问密钥</label>
+                <input type="text" id="nodeSecretInput" placeholder="节点通信密钥">
+            </div>
+            <div style="text-align: right; margin-top: 24px;">
+                <button class="btn btn-danger" onclick="closeNodeModal()" style="margin-right: 8px;">取消</button>
+                <button class="btn btn-primary" onclick="saveNode()">保存节点</button>
+            </div>
         </div>
-        <div style="text-align: right">
-          <button class="btn btn-warning" onclick="closeModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="saveUser()">Save</button>
-        </div>
-      </div>
     </div>
 
     <script>
-      const API_URL = "/api/users";
-      let users = [];
+        // Config & Constants
+        const USER_API = "/api/users";
+        const NODE_API = "/api/nodes";
+        const TRAFFIC_BY_NODE_API = "/api/traffic/by-node";
+        const LOGIN_PASS = "zx8257686@520";
+        
+        let users = [];
+        let nodes = [];
+        let trafficByNode = {};
 
-      async function loadUsers() {
-        try {
-          const res = await fetch(API_URL);
-          users = await res.json();
-          renderUsers();
-        } catch (err) {
-          console.error("Failed to load users", err);
+        // --- Auth Logic ---
+        function checkLogin() {
+            const input = document.getElementById('loginPassword').value;
+            const error = document.getElementById('loginError');
+            
+            if (input === LOGIN_PASS) {
+                // Success
+                document.getElementById('login-overlay').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('login-overlay').style.display = 'none';
+                    document.getElementById('mainApp').style.opacity = '1';
+                }, 300);
+                sessionStorage.setItem('isLoggedIn', 'true');
+                refreshUsers();
+            } else {
+                // Fail
+                error.style.display = 'block';
+                document.getElementById('loginPassword').classList.add('error');
+            }
         }
-      }
 
-      function formatBytes(bytes) {
-        if (bytes === 0) return "0 B";
-        const k = 1024;
-        const sizes = ["B", "KB", "MB", "GB", "TB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-      }
+        function logout() {
+            sessionStorage.removeItem('isLoggedIn');
+            location.reload();
+        }
 
-      function renderUsers() {
-        const tbody = document.getElementById("userTable");
-        tbody.innerHTML = "";
-        users.forEach((user) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-                    <td>${user.username}</td>
-                    <td>${user.password}</td>
-                    <td class="${
-                      user.enabled ? "status-enabled" : "status-disabled"
-                    }">
-                        ${user.enabled ? "Active" : "Disabled"}
-                    </td>
-                    <td>
-                        ↑ ${formatBytes(user.tx)} <br>
-                        ↓ ${formatBytes(user.rx)}
-                    </td>
-                    <td>
-                        <button class="btn ${
-                          user.enabled ? "btn-warning" : "btn-success"
-                        }" 
-                            onclick="toggleUser(${
-                              user.id
-                            }, ${!user.enabled}, '${user.password}')">
-                            ${user.enabled ? "Disable" : "Enable"}
+        // Check auth on load
+        window.addEventListener('load', () => {
+             if (sessionStorage.getItem('isLoggedIn') === 'true') {
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('mainApp').style.opacity = '1';
+                refreshUsers();
+             }
+        });
+
+        // --- Tab Logic ---
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            if (tab === 'users') {
+                document.querySelectorAll('.tab-btn')[0].classList.add('active');
+                document.getElementById('usersTab').classList.add('active');
+                loadUsers();
+            } else {
+                document.querySelectorAll('.tab-btn')[1].classList.add('active');
+                document.getElementById('nodesTab').classList.add('active');
+                loadNodes();
+            }
+        }
+
+        // --- Data Logic ---
+        async function loadUsers() {
+            try {
+                const res = await fetch(USER_API);
+                users = await res.json();
+                renderUsers();
+            } catch (err) {
+                console.error("加载用户失败", err);
+            }
+        }
+
+        async function loadTrafficByNode() {
+            try {
+                const res = await fetch(TRAFFIC_BY_NODE_API);
+                const data = await res.json();
+                trafficByNode = {};
+                data.forEach(entry => {
+                    if (!trafficByNode[entry.username]) trafficByNode[entry.username] = {};
+                    if (!trafficByNode[entry.username][entry.node_name]) trafficByNode[entry.username][entry.node_name] = { tx: 0, rx: 0 };
+                    trafficByNode[entry.username][entry.node_name].tx += entry.tx;
+                    trafficByNode[entry.username][entry.node_name].rx += entry.rx;
+                });
+            } catch (err) {
+                console.error("traffic load error", err);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return "0 B";
+            const k = 1024;
+            const sizes = ["B", "KB", "MB", "GB", "TB"];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+        }
+
+        function toggleDetail(username) {
+            const row = document.getElementById(`detail-${username}`);
+            const icon = document.getElementById(`icon-${username}`);
+            if (row.classList.contains('show')) {
+                row.classList.remove('show');
+                icon.style.transform = 'rotate(0deg)';
+                icon.style.color = 'var(--text-secondary)';
+            } else {
+                row.classList.add('show');
+                icon.style.transform = 'rotate(90deg)';
+                icon.style.color = 'var(--primary)';
+            }
+        }
+
+        function renderUsers() {
+            const container = document.getElementById("userTable");
+            container.innerHTML = "";
+            users.forEach((user) => {
+                const card = document.createElement("div");
+                card.className = "data-card";
+                
+                // Traffic Details check
+                let hasTraffic = trafficByNode[user.username] && Object.keys(trafficByNode[user.username]).length > 0;
+                let trafficHtml = '';
+                
+                if (hasTraffic) {
+                     trafficHtml = '<div class="traffic-grid" style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px;">';
+                     for (const [node, t] of Object.entries(trafficByNode[user.username])) {
+                         trafficHtml += `
+                            <div class="node-item" style="flex-direction:row; justify-content:space-between; align-items:center;">
+                                <span style="font-weight: 500; font-size: 12px;">${node}</span>
+                                <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary);">
+                                    <span style="color: var(--success)">↑ ${formatBytes(t.tx)}</span> 
+                                    <span style="color: var(--primary)">↓ ${formatBytes(t.rx)}</span>
+                                </span>
+                            </div>
+                         `;
+                     }
+                     trafficHtml += '</div>';
+                }
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div class="card-title">
+                            <div style="width:32px; height:32px; background:#eff6ff; color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
+                                ${user.username.charAt(0).toUpperCase()}
+                            </div>
+                            ${user.username}
+                        </div>
+                        <span class="badge ${user.enabled ? 'badge-success' : 'badge-danger'}">${user.enabled ? '启用' : '禁用'}</span>
+                    </div>
+                    
+                    <div class="card-row">
+                        <span>连接密码:</span>
+                        <span style="font-family: monospace; background: #f3f4f6; padding: 2px 6px; border-radius: 4px;">${user.password}</span>
+                    </div>
+                    
+                    <div class="card-row">
+                        <span>总流量:</span>
+                        <span style="font-family: monospace;">
+                             <span style="color: var(--success)">↑ ${formatBytes(user.tx || 0)}</span> / 
+                             <span style="color: var(--primary)">↓ ${formatBytes(user.rx || 0)}</span>
+                        </span>
+                    </div>
+                    
+                    ${trafficHtml}
+
+                    <div class="card-actions">
+                        <button class="btn ${user.enabled ? 'btn-danger' : 'btn-success'}" style="padding: 6px 12px; font-size: 12px;" onclick="toggleUser(${user.id}, ${!user.enabled}, '${user.password}')">
+                            ${user.enabled ? '禁用' : '启用'}
                         </button>
-                        <button class="btn btn-danger" onclick="deleteUser(${
-                          user.id
-                        })">Delete</button>
-                    </td>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteUser(${user.id})">删除</button>
+                    </div>
                 `;
-          tbody.appendChild(tr);
-        });
-      }
-
-      async function saveUser() {
-        const username = document.getElementById("usernameInput").value;
-        const password = document.getElementById("passwordInput").value;
-
-        if (!username || !password) return alert("Please fill in all fields");
-
-        try {
-          await fetch(API_URL, {
-            method: "POST",
-            body: JSON.stringify({ username, password }),
-            headers: { "Content-Type": "application/json" },
-          });
-          closeModal();
-          loadUsers();
-        } catch (err) {
-          alert("Failed to save user");
+                container.appendChild(card);
+            });
         }
-      }
 
-      async function deleteUser(id) {
-        if (!confirm("Are you sure?")) return;
-        await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-        loadUsers();
-      }
-
-      async function toggleUser(id, enabled, password) {
-        await fetch(`${API_URL}/${id}`, {
-          method: "PUT",
-          body: JSON.stringify({ enabled, password }),
-          headers: { "Content-Type": "application/json" },
-        });
-        loadUsers();
-      }
-
-      function showAddModal() {
-        document.getElementById("userModal").style.display = "block";
-        document.getElementById("modalTitle").innerText = "Add User";
-        document.getElementById("usernameInput").value = "";
-        document.getElementById("passwordInput").value = "";
-      }
-
-      function closeModal() {
-        document.getElementById("userModal").style.display = "none";
-      }
-
-      // Close modal when clicking outside
-      window.onclick = function (event) {
-        if (event.target == document.getElementById("userModal")) {
-          closeModal();
+        // --- Actions ---
+        async function saveUser() {
+            const u = document.getElementById("usernameInput").value;
+            const p = document.getElementById("passwordInput").value;
+            if(!u || !p) return alert("请填写完整");
+            try {
+                await fetch(USER_API, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({username:u, password:p}) });
+                closeUserModal(); loadUsers();
+            } catch(e) { alert("操作失败"); }
         }
-      };
 
-      // Auto refresh every 10 seconds
-      loadUsers();
-      setInterval(loadUsers, 10000);
+        async function deleteUser(id) {
+            if(!confirm("确认删除该用户吗？")) return;
+            await fetch(`${USER_API}/${id}`, { method: "DELETE" });
+            loadUsers();
+        }
+
+        async function toggleUser(id, enabled, pwd) {
+            await fetch(`${USER_API}/${id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({enabled, password: pwd}) });
+            loadUsers();
+        }
+
+        // --- Node Logic (Similar) ---
+        async function loadNodes() {
+            const res = await fetch(NODE_API);
+            nodes = await res.json();
+            const container = document.getElementById("nodeTable");
+            container.innerHTML = "";
+            nodes.forEach(node => {
+                const card = document.createElement("div");
+                card.className = "data-card";
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div class="card-title">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:20px;height:20px;color:var(--text-secondary);">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            ${node.name}
+                        </div>
+                        <span class="badge ${node.enabled ? 'badge-success' : 'badge-danger'}">${node.enabled ? '正常' : '禁用'}</span>
+                    </div>
+
+                    <div class="card-row">
+                        <span>地址:</span>
+                        <span style="color: var(--text-secondary)">${node.host}</span>
+                    </div>
+                     <div class="card-row">
+                        <span>最后同步:</span>
+                        <span style="font-size: 12px; color: var(--text-secondary)">${node.last_sync_at ? new Date(node.last_sync_at).toLocaleString() : '从未'}</span>
+                    </div>
+
+                    <div class="card-actions">
+                         <button class="btn ${node.enabled ? 'btn-danger' : 'btn-success'}" style="padding: 6px 12px; font-size: 12px;" onclick="toggleNode(${node.id}, ${!node.enabled}, '${node.name}', '${node.host}', '${node.secret}')">
+                            ${node.enabled ? '禁用' : '启用'}
+                        </button>
+                        <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteNode(${node.id})">删除</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function saveNode() {
+            const name = document.getElementById("nodeNameInput").value;
+            const host = document.getElementById("nodeHostInput").value;
+            const secret = document.getElementById("nodeSecretInput").value;
+            if(!name || !host || !secret) return alert("请完整填写");
+            try {
+                await fetch(NODE_API, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({name, host, secret}) });
+                closeNodeModal(); loadNodes();
+            } catch(e) { alert("保存失败"); }
+        }
+
+        async function deleteNode(id) {
+            if(!confirm("删除节点将清除相关流量数据，确定吗？")) return;
+            await fetch(`${NODE_API}/${id}`, { method: "DELETE" });
+            loadNodes();
+        }
+
+        async function toggleNode(id, enabled, name, host, secret) {
+            await fetch(`${NODE_API}/${id}`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: JSON.stringify({name, host, secret, enabled}) });
+            loadNodes();
+        }
+
+        // --- Modal Helpers ---
+        function showAddUserModal() {
+            document.getElementById("userModal").classList.add("active");
+            document.getElementById("passwordInput").value = "zx8257686@520"; 
+            document.getElementById("usernameInput").value = "";
+        }
+        function closeUserModal() { document.getElementById("userModal").classList.remove("active"); }
+
+        function showAddNodeModal() {
+            document.getElementById("nodeModal").classList.add("active");
+            document.getElementById("nodeSecretInput").value = "zx8257686@520"; 
+            document.getElementById("nodeNameInput").value = "";
+            document.getElementById("nodeHostInput").value = "";
+        }
+        function closeNodeModal() { document.getElementById("nodeModal").classList.remove("active"); }
+
+        // Interval
+        setInterval(() => {
+             if (document.getElementById('mainApp').style.opacity === '1') {
+                 if(document.querySelector('.tab-btn.active').innerText.includes('用户')) refreshUsers();
+                 else loadNodes();
+             }
+        }, 10000);
+
+        async function refreshUsers() {
+            await loadTrafficByNode();
+            await loadUsers();
+        }
     </script>
-  </body>
+</body>
 </html>
