@@ -33,6 +33,9 @@ type User struct {
 	// Traffic stats (merged from Hysteria)
 	Tx int64 `json:"tx"`
 	Rx int64 `json:"rx"`
+	// Traffic limit settings
+	TrafficLimit       int64 `json:"traffic_limit"`         // Traffic limit in bytes, 0 = unlimited
+	AutoDisableOnLimit bool  `json:"auto_disable_on_limit"` // Auto disable when limit exceeded
 }
 
 // Node model (represents a hysteria-proxy instance)
@@ -112,6 +115,18 @@ func initDB() {
 		log.Fatal(err)
 	}
 
+	// Upgrade users table schema - add traffic limit fields if not exist
+	// SQLite doesn't have IF NOT EXISTS for ALTER TABLE, so we handle errors gracefully
+	_, err = db.Exec("ALTER TABLE users ADD COLUMN traffic_limit INTEGER DEFAULT 0")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("Warning: Failed to add traffic_limit column: %v", err)
+	}
+
+	_, err = db.Exec("ALTER TABLE users ADD COLUMN auto_disable_on_limit BOOLEAN DEFAULT 1")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("Warning: Failed to add auto_disable_on_limit column: %v", err)
+	}
+
 	log.Println("Database initialized successfully")
 }
 
@@ -151,8 +166,10 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 
 	var storedPassword string
 	var enabled bool
+	var trafficLimit int64
+	var autoDisable bool
 
-	err := db.QueryRow("SELECT password, enabled FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled)
+	err := db.QueryRow("SELECT password, enabled, traffic_limit, auto_disable_on_limit FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled, &trafficLimit, &autoDisable)
 	if err == sql.ErrNoRows {
 		log.Printf("User not found: %s", username)
 		http.Error(w, "User not found", http.StatusUnauthorized)
@@ -173,6 +190,27 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Password mismatch for user: %s. Provided: %s, Stored: %s", username, password, storedPassword)
 		http.Error(w, "Invalid password", http.StatusUnauthorized)
 		return
+	}
+
+	// Check traffic limit
+	if trafficLimit > 0 && autoDisable {
+		var totalTraffic sql.NullInt64
+		err := db.QueryRow(`
+			SELECT SUM(tx) + SUM(rx) as total 
+			FROM traffic_stats 
+			WHERE username = ?
+		`, username).Scan(&totalTraffic)
+
+		if err == nil && totalTraffic.Valid && totalTraffic.Int64 >= trafficLimit {
+			// Auto-disable user due to traffic limit exceeded
+			_, err = db.Exec("UPDATE users SET enabled = 0 WHERE username = ?", username)
+			if err != nil {
+				log.Printf("Failed to disable user %s: %v", username, err)
+			}
+			log.Printf("User %s disabled due to traffic limit exceeded: %d/%d bytes", username, totalTraffic.Int64, trafficLimit)
+			http.Error(w, "Traffic limit exceeded. Account disabled.", http.StatusForbidden)
+			return
+		}
 	}
 
 	log.Printf("Auth successful for user: %s", username)
@@ -200,12 +238,19 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func userDetailHandler(w http.ResponseWriter, r *http.Request) {
-	// Simple path parsing /api/users/{id}
+	// Simple path parsing /api/users/{id} or /api/users/{id}/reset-traffic
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 4 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
+
+	// Check if this is a reset-traffic request
+	if len(parts) >= 5 && parts[4] == "reset-traffic" {
+		resetUserTrafficHandler(w, r)
+		return
+	}
+
 	id := parts[3]
 
 	switch r.Method {
@@ -219,7 +264,7 @@ func userDetailHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, username, password, enabled, created_at FROM users")
+	rows, err := db.Query("SELECT id, username, password, enabled, created_at, traffic_limit, auto_disable_on_limit FROM users")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -229,7 +274,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	users := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.Enabled, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.Enabled, &u.CreatedAt, &u.TrafficLimit, &u.AutoDisableOnLimit); err != nil {
 			continue
 		}
 		users = append(users, u)
@@ -272,7 +317,14 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO users (username, password, enabled) VALUES (?, ?, ?)", u.Username, u.Password, 1)
+	// Set default values if not provided
+	if u.TrafficLimit == 0 {
+		u.TrafficLimit = 0 // 0 means unlimited
+	}
+	// AutoDisableOnLimit defaults to true from struct or can be set by client
+
+	_, err := db.Exec("INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit) VALUES (?, ?, ?, ?, ?)", 
+		u.Username, u.Password, 1, u.TrafficLimit, u.AutoDisableOnLimit)
 	if err != nil {
 		http.Error(w, "Failed to create user (username might indicate duplicate)", http.StatusInternalServerError)
 		return
@@ -287,9 +339,9 @@ func updateUser(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	// If password provided, update it. If enabled status matches, update it.
-	// We'll update both for simplicity of this API
-	_, err := db.Exec("UPDATE users SET password = ?, enabled = ? WHERE id = ?", u.Password, u.Enabled, id)
+	// Update all user fields including traffic limit settings
+	_, err := db.Exec("UPDATE users SET password = ?, enabled = ?, traffic_limit = ?, auto_disable_on_limit = ? WHERE id = ?", 
+		u.Password, u.Enabled, u.TrafficLimit, u.AutoDisableOnLimit, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -478,6 +530,53 @@ func trafficByNodeHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(entries)
 }
 
+// ------ Traffic Reset Handler ------
+
+func resetUserTrafficHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract user ID from path: /api/users/{id}/reset-traffic
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	userID := parts[3]
+
+	// Get username
+	var username string
+	err := db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Delete all traffic stats for this user
+	_, err = db.Exec("DELETE FROM traffic_stats WHERE username = ?", username)
+	if err != nil {
+		log.Printf("Error resetting traffic for user %s: %v", username, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Re-enable user if they were disabled due to traffic limit
+	_, err = db.Exec("UPDATE users SET enabled = 1 WHERE id = ?", userID)
+	if err != nil {
+		log.Printf("Error re-enabling user %s: %v", username, err)
+	}
+
+	log.Printf("Traffic reset for user %s (ID: %s)", username, userID)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Traffic reset successfully"})
+}
+
 // ------ Helpers ------
 
 func fetchTrafficStats() map[string]map[string]interface{} {
@@ -635,6 +734,35 @@ func collectTrafficFromAllNodes() {
 					} else {
 						log.Printf("Updated traffic for user %s on node %s: total_tx=%d, total_rx=%d (current: %d/%d)",
 							username, node.Name, newTx, newRx, currentTx, currentRx)
+
+						// Check traffic limit and auto-disable if exceeded
+						var trafficLimit int64
+						var autoDisable bool
+						err := db.QueryRow(`
+							SELECT traffic_limit, auto_disable_on_limit 
+							FROM users 
+							WHERE username = ?
+						`, username).Scan(&trafficLimit, &autoDisable)
+
+						if err == nil && trafficLimit > 0 && autoDisable {
+							// Get total traffic across all nodes
+							var totalTraffic sql.NullInt64
+							err := db.QueryRow(`
+								SELECT SUM(tx) + SUM(rx) as total 
+								FROM traffic_stats 
+								WHERE username = ?
+							`, username).Scan(&totalTraffic)
+
+							if err == nil && totalTraffic.Valid && totalTraffic.Int64 >= trafficLimit {
+								_, err = db.Exec("UPDATE users SET enabled = 0 WHERE username = ?", username)
+								if err != nil {
+									log.Printf("Failed to disable user %s: %v", username, err)
+								} else {
+									log.Printf("User %s auto-disabled due to traffic limit exceeded: %d/%d bytes", 
+										username, totalTraffic.Int64, trafficLimit)
+								}
+							}
+						}
 					}
 				}
 			}
