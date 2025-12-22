@@ -4,12 +4,13 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY auth_server.go index.html ./
+COPY static ./static
 RUN go build -o auth-server auth_server.go
 
 FROM alpine:latest
 WORKDIR /app
 COPY --from=builder /app/auth-server .
-# No need to copy index.html again if it's embedded, but the previous step embedded it. 
-# Just ensuring dependencies.
+COPY --from=builder /app/static ./static
+# index.html is embedded in the binary
 EXPOSE 8080
 CMD ["./auth-server"]

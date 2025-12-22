@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -40,12 +41,12 @@ type User struct {
 
 // Node model (represents a hysteria-proxy instance)
 type Node struct {
-	ID         int       `json:"id"`
-	Name       string    `json:"name"`
-	Host       string    `json:"host"`
-	Secret     string    `json:"secret"`
-	Enabled    bool      `json:"enabled"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         int        `json:"id"`
+	Name       string     `json:"name"`
+	Host       string     `json:"host"`
+	Secret     string     `json:"secret"`
+	Enabled    bool       `json:"enabled"`
+	CreatedAt  time.Time  `json:"created_at"`
 	LastSyncAt *time.Time `json:"last_sync_at,omitempty"`
 }
 
@@ -125,6 +126,12 @@ func initDB() {
 	_, err = db.Exec("ALTER TABLE users ADD COLUMN auto_disable_on_limit BOOLEAN DEFAULT 1")
 	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
 		log.Printf("Warning: Failed to add auto_disable_on_limit column: %v", err)
+	}
+
+	// Add subscription_token column for VPN subscription feature
+	_, err = db.Exec("ALTER TABLE users ADD COLUMN subscription_token TEXT UNIQUE")
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		log.Printf("Warning: Failed to add subscription_token column: %v", err)
 	}
 
 	log.Println("Database initialized successfully")
@@ -238,7 +245,7 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func userDetailHandler(w http.ResponseWriter, r *http.Request) {
-	// Simple path parsing /api/users/{id} or /api/users/{id}/reset-traffic
+	// Simple path parsing /api/users/{id} or /api/users/{id}/reset-traffic or /api/users/{id}/subscription or /api/users/{id}/generate-token
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 4 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
@@ -248,6 +255,18 @@ func userDetailHandler(w http.ResponseWriter, r *http.Request) {
 	// Check if this is a reset-traffic request
 	if len(parts) >= 5 && parts[4] == "reset-traffic" {
 		resetUserTrafficHandler(w, r)
+		return
+	}
+
+	// Check if this is a subscription request
+	if len(parts) >= 5 && parts[4] == "subscription" {
+		getUserSubscriptionHandler(w, r)
+		return
+	}
+
+	// Check if this is a generate-token request
+	if len(parts) >= 5 && parts[4] == "generate-token" {
+		generateTokenHandler(w, r)
 		return
 	}
 
@@ -323,7 +342,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	// AutoDisableOnLimit defaults to true from struct or can be set by client
 
-	_, err := db.Exec("INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit) VALUES (?, ?, ?, ?, ?)", 
+	_, err := db.Exec("INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit) VALUES (?, ?, ?, ?, ?)",
 		u.Username, u.Password, 1, u.TrafficLimit, u.AutoDisableOnLimit)
 	if err != nil {
 		http.Error(w, "Failed to create user (username might indicate duplicate)", http.StatusInternalServerError)
@@ -340,7 +359,7 @@ func updateUser(w http.ResponseWriter, r *http.Request, id string) {
 	}
 
 	// Update all user fields including traffic limit settings
-	_, err := db.Exec("UPDATE users SET password = ?, enabled = ?, traffic_limit = ?, auto_disable_on_limit = ? WHERE id = ?", 
+	_, err := db.Exec("UPDATE users SET password = ?, enabled = ?, traffic_limit = ?, auto_disable_on_limit = ? WHERE id = ?",
 		u.Password, u.Enabled, u.TrafficLimit, u.AutoDisableOnLimit, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -418,7 +437,7 @@ func createNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := db.Exec("INSERT INTO nodes (name, host, secret, enabled) VALUES (?, ?, ?, ?)", 
+	_, err := db.Exec("INSERT INTO nodes (name, host, secret, enabled) VALUES (?, ?, ?, ?)",
 		n.Name, n.Host, n.Secret, true)
 	if err != nil {
 		http.Error(w, "Failed to create node (name might be duplicate)", http.StatusInternalServerError)
@@ -434,7 +453,7 @@ func updateNode(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	_, err := db.Exec("UPDATE nodes SET name = ?, host = ?, secret = ?, enabled = ? WHERE id = ?", 
+	_, err := db.Exec("UPDATE nodes SET name = ?, host = ?, secret = ?, enabled = ? WHERE id = ?",
 		n.Name, n.Host, n.Secret, n.Enabled, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -509,12 +528,12 @@ func trafficByNodeHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type TrafficEntry struct {
-		NodeID     int       `json:"node_id"`
-		NodeName   string    `json:"node_name"`
-		Username   string    `json:"username"`
-		Tx         int64     `json:"tx"`
-		Rx         int64     `json:"rx"`
-		UpdatedAt  time.Time `json:"updated_at"`
+		NodeID    int       `json:"node_id"`
+		NodeName  string    `json:"node_name"`
+		Username  string    `json:"username"`
+		Tx        int64     `json:"tx"`
+		Rx        int64     `json:"rx"`
+		UpdatedAt time.Time `json:"updated_at"`
 	}
 
 	entries := []TrafficEntry{}
@@ -758,7 +777,7 @@ func collectTrafficFromAllNodes() {
 								if err != nil {
 									log.Printf("Failed to disable user %s: %v", username, err)
 								} else {
-									log.Printf("User %s auto-disabled due to traffic limit exceeded: %d/%d bytes", 
+									log.Printf("User %s auto-disabled due to traffic limit exceeded: %d/%d bytes",
 										username, totalTraffic.Int64, trafficLimit)
 								}
 							}
@@ -778,6 +797,235 @@ func collectTrafficFromAllNodes() {
 	}
 }
 
+// ------ Subscription Handlers ------
+
+// generateToken generates a unique subscription token
+func generateToken() string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, 32)
+	for i := range b {
+		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+		time.Sleep(time.Nanosecond)
+	}
+	return string(b)
+}
+
+// getUserSubscriptionHandler returns the subscription URL for a user
+func getUserSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract user ID from path: /api/users/{id}/subscription
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	userID := parts[3]
+
+	var token sql.NullString
+	err := db.QueryRow("SELECT subscription_token FROM users WHERE id = ?", userID).Scan(&token)
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate token if it doesn't exist
+	if !token.Valid || token.String == "" {
+		newToken := generateToken()
+		_, err = db.Exec("UPDATE users SET subscription_token = ? WHERE id = ?", newToken, userID)
+		if err != nil {
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			return
+		}
+		token.String = newToken
+		token.Valid = true
+	}
+
+	// Get host from request
+	host := r.Host
+	if host == "" {
+		host = "localhost:8080"
+	}
+
+	subscriptionURL := "http://" + host + "/subscription/" + token.String
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"url": subscriptionURL,
+	})
+}
+
+// generateTokenHandler generates or regenerates a subscription token for a user
+func generateTokenHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract user ID from path: /api/users/{id}/generate-token
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 4 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	userID := parts[3]
+
+	// Check if user exists
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
+	if err != nil || !exists {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	// Generate new token
+	newToken := generateToken()
+	_, err = db.Exec("UPDATE users SET subscription_token = ? WHERE id = ?", newToken, userID)
+	if err != nil {
+		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"token": newToken,
+	})
+}
+
+// serveSubscriptionHandler serves the Clash YAML configuration
+func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Extract token from path: /subscription/{token}
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 3 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	token := parts[2]
+
+	// Get user by token
+	var username, password string
+	err := db.QueryRow("SELECT username, password FROM users WHERE subscription_token = ? AND enabled = 1", token).Scan(&username, &password)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Invalid or expired subscription", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+
+	// Get all enabled nodes
+	rows, err := db.Query("SELECT name, host FROM nodes WHERE enabled = 1")
+	if err != nil {
+		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type NodeInfo struct {
+		Name string
+		Host string
+	}
+
+	nodes := []NodeInfo{}
+	for rows.Next() {
+		var n NodeInfo
+		if err := rows.Scan(&n.Name, &n.Host); err != nil {
+			continue
+		}
+		nodes = append(nodes, n)
+	}
+
+	if len(nodes) == 0 {
+		http.Error(w, "No enabled nodes available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Generate Clash YAML configuration
+	var yamlConfig strings.Builder
+	yamlConfig.WriteString("proxies:\n")
+
+	proxyNames := []string{}
+	for _, node := range nodes {
+		// Extract IP and port from host (format: ip:port)
+		hostParts := strings.Split(node.Host, ":")
+		if len(hostParts) != 2 {
+			continue
+		}
+		ip := hostParts[0]
+		port := hostParts[1]
+
+		proxyName := "hysteria2-" + ip
+		proxyNames = append(proxyNames, proxyName)
+
+		yamlConfig.WriteString(fmt.Sprintf(`  - name: "%s"
+    type: hysteria2
+    server: %s
+    port: %s
+    password: "%s"
+    skip-cert-verify: true
+    
+`, proxyName, ip, port, password))
+	}
+
+	// Add proxy groups
+	yamlConfig.WriteString("proxy-groups:\n")
+	yamlConfig.WriteString(`  - name: "代理选择"
+    type: select
+    proxies:
+      - "自动选择"
+      - "直连"
+`)
+	for _, name := range proxyNames {
+		yamlConfig.WriteString(fmt.Sprintf("      - \"%s\"\n", name))
+	}
+
+	yamlConfig.WriteString("\n  - name: \"自动选择\"\n")
+	yamlConfig.WriteString("    type: url-test\n")
+	yamlConfig.WriteString("    proxies:\n")
+	for _, name := range proxyNames {
+		yamlConfig.WriteString(fmt.Sprintf("      - \"%s\"\n", name))
+	}
+	yamlConfig.WriteString("    url: 'http://www.gstatic.com/generate_204'\n")
+	yamlConfig.WriteString("    interval: 300\n\n")
+
+	yamlConfig.WriteString(`  - name: "直连"
+    type: select
+    proxies:
+      - DIRECT
+
+rules:
+  # 局域网直连
+  - IP-CIDR,127.0.0.0/8,直连
+  - IP-CIDR,192.168.0.0/16,直连
+  - IP-CIDR,10.0.0.0/8,直连
+  - IP-CIDR,172.16.0.0/12,直连
+  
+  # 中国域名和IP直连
+  - DOMAIN-SUFFIX,cn,直连
+  - GEOIP,CN,直连
+  
+  # 其他走代理
+  - MATCH,代理选择
+`)
+
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=clash-config.yaml")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(yamlConfig.String()))
+}
+
 // ------ Main ------
 
 func main() {
@@ -787,23 +1035,30 @@ func main() {
 	go collectTrafficFromAllNodes()
 	log.Println("Started periodic traffic collection (every 60 seconds)")
 
-	// Static Files (Embedded)
+	// Static Files - serve from static directory
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+
+	// Static Files (Embedded) - serve index.html
 	http.Handle("/", http.FileServer(http.FS(content)))
 
 	// API - Authentication
 	http.HandleFunc("/auth", authHandler)
-	
+
 	// API - User Management
 	http.HandleFunc("/api/users", usersHandler)
 	http.HandleFunc("/api/users/", userDetailHandler)
-	
+
 	// API - Node Management
 	http.HandleFunc("/api/nodes", nodesHandler)
 	http.HandleFunc("/api/nodes/", nodeDetailHandler)
-	
+
 	// API - Traffic Aggregation
 	http.HandleFunc("/api/traffic/aggregated", trafficAggregatedHandler)
 	http.HandleFunc("/api/traffic/by-node", trafficByNodeHandler)
+
+	// API - Subscription
+	http.HandleFunc("/subscription/", serveSubscriptionHandler)
 
 	log.Println("Auth Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
