@@ -24,6 +24,22 @@ const (
 	HysteriaSecret     = "zx8257686@520" // Should match config.yaml
 )
 
+// getPublicHost returns the public host for subscription URLs
+func getPublicHost() string {
+	if host := os.Getenv("PUBLIC_HOST"); host != "" {
+		return host
+	}
+	return "localhost:8080" // fallback
+}
+
+// getPublicProtocol returns the protocol (http/https) for subscription URLs
+func getPublicProtocol() string {
+	if protocol := os.Getenv("PUBLIC_PROTOCOL"); protocol != "" {
+		return protocol
+	}
+	return "http" // default to http
+}
+
 // User model
 type User struct {
 	ID        int       `json:"id"`
@@ -640,13 +656,18 @@ func fetchTrafficFromNode(node Node) map[string]map[string]interface{} {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Error fetching traffic from node %s: %v", node.Name, err)
+		// Check if it's a timeout error
+		if strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline exceeded") {
+			log.Printf("Error fetching traffic from node %s (%s): Connection timeout - please verify node address is accessible", node.Name, node.Host)
+		} else {
+			log.Printf("Error fetching traffic from node %s (%s): %v", node.Name, node.Host, err)
+		}
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		log.Printf("Node %s returned status %d", node.Name, resp.StatusCode)
+		log.Printf("Node %s (%s) returned status %d", node.Name, node.Host, resp.StatusCode)
 		return nil
 	}
 
@@ -847,13 +868,18 @@ func getUserSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		token.Valid = true
 	}
 
-	// Get host from request
-	host := r.Host
-	if host == "" {
-		host = "localhost:8080"
+	// Get host from environment variable or request
+	// Priority: PUBLIC_HOST env var > r.Host > fallback
+	host := getPublicHost()
+	if host == "localhost:8080" && r.Host != "" {
+		// If no PUBLIC_HOST is set, try to use r.Host
+		host = r.Host
 	}
 
-	subscriptionURL := "http://" + host + "/subscription/" + token.String
+	protocol := getPublicProtocol()
+	subscriptionURL := protocol + "://" + host + "/subscription/" + token.String
+	
+	log.Printf("Generated subscription URL for user ID %s: %s", userID, subscriptionURL)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -880,17 +906,22 @@ func generateTokenHandler(w http.ResponseWriter, r *http.Request) {
 	var exists bool
 	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
 	if err != nil || !exists {
+		log.Printf("User not found for ID %s: err=%v, exists=%v", userID, err, exists)
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
 	// Generate new token
 	newToken := generateToken()
+	log.Printf("Attempting to update subscription token for user ID %s", userID)
 	_, err = db.Exec("UPDATE users SET subscription_token = ? WHERE id = ?", newToken, userID)
 	if err != nil {
+		log.Printf("Failed to update subscription token for user ID %s: %v", userID, err)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
+	
+	log.Printf("Successfully generated new subscription token for user ID %s", userID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -925,7 +956,13 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get all enabled nodes
+	// Get default port from environment variable
+	defaultPort := os.Getenv("NODE_PORT")
+	if defaultPort == "" {
+		defaultPort = "1443" // default port
+	}
+
+	// Get all enabled nodes from database
 	rows, err := db.Query("SELECT name, host FROM nodes WHERE enabled = 1")
 	if err != nil {
 		http.Error(w, "Failed to fetch nodes", http.StatusInternalServerError)
@@ -944,8 +981,14 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&n.Name, &n.Host); err != nil {
 			continue
 		}
+		// If host doesn't contain port, append default port
+		if !strings.Contains(n.Host, ":") {
+			n.Host = n.Host + ":" + defaultPort
+		}
 		nodes = append(nodes, n)
 	}
+
+	log.Printf("Using %d nodes from database for user %s (default port: %s)", len(nodes), username, defaultPort)
 
 	if len(nodes) == 0 {
 		http.Error(w, "No enabled nodes available", http.StatusServiceUnavailable)
@@ -969,6 +1012,9 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		proxyName := "hysteria2-" + ip
 		proxyNames = append(proxyNames, proxyName)
 
+		// Password format: username:password
+		authPassword := username + ":" + password
+
 		yamlConfig.WriteString(fmt.Sprintf(`  - name: "%s"
     type: hysteria2
     server: %s
@@ -976,7 +1022,7 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
     password: "%s"
     skip-cert-verify: true
     
-`, proxyName, ip, port, password))
+`, proxyName, ip, port, authPassword))
 	}
 
 	// Add proxy groups

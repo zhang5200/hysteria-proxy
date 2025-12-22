@@ -16,6 +16,13 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Asia/Shanghai
+      # 配置公网访问地址,用于生成订阅链接
+      # 请修改为您的公网IP或域名,例如: your-domain.com 或 1.2.3.4:8080
+      - PUBLIC_HOST=localhost:8080
+      # 协议类型: http 或 https
+      - PUBLIC_PROTOCOL=http
+      # 节点默认端口,如果数据库中节点地址没有指定端口则使用此端口
+      - NODE_PORT=1443
 
   # Hysteria 代理服务
   hysteria-proxy:

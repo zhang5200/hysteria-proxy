@@ -12,14 +12,12 @@ async function loadSubscriptions() {
 }
 
 // Render subscription cards
-function renderSubscriptions(users) {
+async function renderSubscriptions(users) {
     const container = document.getElementById("subscriptionTable");
     container.innerHTML = "";
 
-    users.forEach(async (user) => {
-        const card = document.createElement("div");
-        card.className = "data-card";
-
+    // Process all users and get their subscription URLs
+    const userCards = await Promise.all(users.map(async (user) => {
         // Get subscription URL
         let subscriptionUrl = '';
         try {
@@ -29,6 +27,14 @@ function renderSubscriptions(users) {
         } catch (err) {
             console.error(`获取用户 ${user.username} 订阅链接失败`, err);
         }
+
+        return { user, subscriptionUrl };
+    }));
+
+    // Render all cards
+    userCards.forEach(({ user, subscriptionUrl }) => {
+        const card = document.createElement("div");
+        card.className = "data-card";
 
         card.innerHTML = `
             <div class="card-header">
@@ -56,7 +62,7 @@ function renderSubscriptions(users) {
             
             <div class="qr-code-container" id="qr-${user.id}">
                 <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-main);">扫描二维码订阅</div>
-                <canvas id="qr-canvas-${user.id}"></canvas>
+                <div id="qr-canvas-${user.id}" style="display: inline-block;"></div>
             </div>
             
             <div class="card-actions">
@@ -71,9 +77,12 @@ function renderSubscriptions(users) {
 
         container.appendChild(card);
 
-        // Generate QR code if URL exists
+        // Generate QR code after DOM is ready
         if (subscriptionUrl) {
-            generateQRCode(`qr-canvas-${user.id}`, subscriptionUrl);
+            // Use setTimeout to ensure DOM is fully rendered
+            setTimeout(() => {
+                generateQRCode(`qr-canvas-${user.id}`, subscriptionUrl);
+            }, 100);
         }
     });
 }
@@ -105,21 +114,23 @@ function showCopyFeedback() {
     }, 2000);
 }
 
-// Generate QR code using qrcode.js
+// Generate QR code using qrcodejs
 function generateQRCode(canvasId, text) {
-    const canvas = document.getElementById(canvasId);
-    if (!canvas || !text) return;
+    const container = document.getElementById(canvasId);
+    if (!container || !text) return;
 
     try {
-        QRCode.toCanvas(canvas, text, {
+        // Clear previous QR code if exists
+        container.innerHTML = '';
+        
+        // Generate QR code
+        new QRCode(container, {
+            text: text,
             width: 200,
-            margin: 2,
-            color: {
-                dark: '#111827',
-                light: '#ffffff'
-            }
-        }, function (error) {
-            if (error) console.error('QR Code generation error:', error);
+            height: 200,
+            colorDark: '#111827',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
         });
     } catch (err) {
         console.error('QR Code error:', err);
