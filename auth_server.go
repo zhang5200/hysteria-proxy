@@ -134,23 +134,42 @@ func initDB() {
 
 	// Upgrade users table schema - add traffic limit fields if not exist
 	// SQLite doesn't have IF NOT EXISTS for ALTER TABLE, so we handle errors gracefully
-	_, err = db.Exec("ALTER TABLE users ADD COLUMN traffic_limit INTEGER DEFAULT 0")
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		log.Printf("Warning: Failed to add traffic_limit column: %v", err)
-	}
-
-	_, err = db.Exec("ALTER TABLE users ADD COLUMN auto_disable_on_limit BOOLEAN DEFAULT 1")
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		log.Printf("Warning: Failed to add auto_disable_on_limit column: %v", err)
-	}
-
-	// Add subscription_token column for VPN subscription feature
-	_, err = db.Exec("ALTER TABLE users ADD COLUMN subscription_token TEXT UNIQUE")
-	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		log.Printf("Warning: Failed to add subscription_token column: %v", err)
-	}
+	upgradeSchema()
 
 	log.Println("Database initialized successfully")
+}
+
+// upgradeSchema ensures all required columns exist in the users table
+func upgradeSchema() {
+	// Check and add columns one by one
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{"traffic_limit", "ALTER TABLE users ADD COLUMN traffic_limit INTEGER DEFAULT 0"},
+		{"auto_disable_on_limit", "ALTER TABLE users ADD COLUMN auto_disable_on_limit BOOLEAN DEFAULT 1"},
+		{"subscription_token", "ALTER TABLE users ADD COLUMN subscription_token TEXT"},
+	}
+
+	for _, col := range columns {
+		// Check if column exists
+		var count int
+		err := db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('users') WHERE name = ?", col.name).Scan(&count)
+		if err != nil {
+			log.Printf("Error checking column %s: %v", col.name, err)
+			continue
+		}
+
+		if count == 0 {
+			// Column doesn't exist, add it
+			_, err = db.Exec(col.definition)
+			if err != nil {
+				log.Printf("Warning: Failed to add %s column: %v", col.name, err)
+			} else {
+				log.Printf("Successfully added %s column", col.name)
+			}
+		}
+	}
 }
 
 // Hysteria Auth Request
@@ -846,13 +865,37 @@ func getUserSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := parts[3]
 
-	var token sql.NullString
-	err := db.QueryRow("SELECT subscription_token FROM users WHERE id = ?", userID).Scan(&token)
+	// First check if user exists
+	var username string
+	err := db.QueryRow("SELECT username FROM users WHERE id = ?", userID).Scan(&username)
 	if err == sql.ErrNoRows {
-		http.Error(w, "User not found", http.StatusNotFound)
+		log.Printf("User not found: ID %s", userID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "User not found",
+		})
 		return
 	} else if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
+		log.Printf("Database error when fetching user %s: %v", userID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Database error: " + err.Error(),
+		})
+		return
+	}
+
+	// Get or generate subscription token
+	var token sql.NullString
+	err = db.QueryRow("SELECT subscription_token FROM users WHERE id = ?", userID).Scan(&token)
+	if err != nil {
+		log.Printf("Error fetching subscription_token for user %s: %v", userID, err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "Failed to fetch subscription token. Database may need migration.",
+		})
 		return
 	}
 
@@ -861,11 +904,17 @@ func getUserSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		newToken := generateToken()
 		_, err = db.Exec("UPDATE users SET subscription_token = ? WHERE id = ?", newToken, userID)
 		if err != nil {
-			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
+			log.Printf("Failed to generate token for user %s: %v", userID, err)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": "Failed to generate token",
+			})
 			return
 		}
 		token.String = newToken
 		token.Valid = true
+		log.Printf("Generated new subscription token for user %s", username)
 	}
 
 	// Get host from environment variable or request
@@ -878,8 +927,8 @@ func getUserSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 
 	protocol := getPublicProtocol()
 	subscriptionURL := protocol + "://" + host + "/subscription/" + token.String
-	
-	log.Printf("Generated subscription URL for user ID %s: %s", userID, subscriptionURL)
+
+	log.Printf("Generated subscription URL for user %s (ID: %s): %s", username, userID, subscriptionURL)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -920,7 +969,7 @@ func generateTokenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	
+
 	log.Printf("Successfully generated new subscription token for user ID %s", userID)
 
 	w.Header().Set("Content-Type", "application/json")
