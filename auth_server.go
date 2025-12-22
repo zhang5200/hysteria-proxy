@@ -1030,14 +1030,10 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 		if err := rows.Scan(&n.Name, &n.Host); err != nil {
 			continue
 		}
-		// If host doesn't contain port, append default port
-		if !strings.Contains(n.Host, ":") {
-			n.Host = n.Host + ":" + defaultPort
-		}
 		nodes = append(nodes, n)
 	}
 
-	log.Printf("Using %d nodes from database for user %s (default port: %s)", len(nodes), username, defaultPort)
+	log.Printf("Using %d nodes from database for user %s (proxy port: %s)", len(nodes), username, defaultPort)
 
 	if len(nodes) == 0 {
 		http.Error(w, "No enabled nodes available", http.StatusServiceUnavailable)
@@ -1050,15 +1046,13 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 
 	proxyNames := []string{}
 	for _, node := range nodes {
-		// Extract IP and port from host (format: ip:port)
+		// Extract server IP from host (format: ip or ip:port)
+		// The host field stores the management API address (e.g., ip:8081)
+		// But for proxy connection, we use NODE_PORT (e.g., 1443)
 		hostParts := strings.Split(node.Host, ":")
-		if len(hostParts) != 2 {
-			continue
-		}
-		ip := hostParts[0]
-		port := hostParts[1]
+		serverIP := hostParts[0]
 
-		proxyName := "hysteria2-" + ip
+		proxyName := "hysteria2-" + serverIP
 		proxyNames = append(proxyNames, proxyName)
 
 		// Password format: username:password
@@ -1071,7 +1065,7 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
     password: "%s"
     skip-cert-verify: true
     
-`, proxyName, ip, port, authPassword))
+`, proxyName, serverIP, defaultPort, authPassword))
 	}
 
 	// Add proxy groups
