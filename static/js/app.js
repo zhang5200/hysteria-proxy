@@ -2,6 +2,7 @@
 const USER_API = "/api/users";
 const NODE_API = "/api/nodes";
 const TRAFFIC_BY_NODE_API = "/api/traffic/by-node";
+const LOGIN_USER = "admin";
 const LOGIN_PASS = "zx8257686@520";
 
 let users = [];
@@ -12,10 +13,11 @@ let editingNodeId = null; // Track if we're editing a node
 
 // --- Auth Logic ---
 function checkLogin() {
-  const input = document.getElementById("loginPassword").value;
+  const userInput = document.getElementById("loginUsername").value;
+  const passInput = document.getElementById("loginPassword").value;
   const error = document.getElementById("loginError");
 
-  if (input === LOGIN_PASS) {
+  if (userInput === LOGIN_USER && passInput === LOGIN_PASS) {
     // Success
     document.getElementById("login-overlay").style.opacity = "0";
     setTimeout(() => {
@@ -27,7 +29,8 @@ function checkLogin() {
   } else {
     // Fail
     error.style.display = "block";
-    document.getElementById("loginPassword").classList.add("error");
+    if (userInput !== LOGIN_USER) document.getElementById("loginUsername").classList.add("error");
+    if (passInput !== LOGIN_PASS) document.getElementById("loginPassword").classList.add("error");
   }
 }
 
@@ -236,7 +239,7 @@ function renderUsers() {
             ${trafficHtml}
 
             <div class="card-actions">
-                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; background: white; color: var(--primary); border: 1px solid var(--border);" onclick="showEditUserModal(${
+                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="showEditUserModal(${
                   user.id
                 })">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
@@ -403,7 +406,7 @@ async function loadNodes() {
             </div>
 
             <div class="card-actions">
-                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px; background: white; color: var(--primary); border: 1px solid var(--border);" onclick="showEditNodeModal(${
+                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="showEditNodeModal(${
                   node.id
                 })">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">

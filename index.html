@@ -13,47 +13,52 @@
     <!-- Login Overlay -->
     <div id="login-overlay">
         <div class="login-card">
-            <svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                style="color: var(--primary);">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <svg class="login-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <circle cx="19" cy="5" r="2" />
+                <circle cx="5" cy="5" r="2" />
+                <circle cx="5" cy="19" r="2" />
+                <circle cx="19" cy="19" r="2" />
+                <path d="M10.5 10.5L6.5 6.5" />
+                <path d="M13.5 13.5L17.5 17.5" />
+                <path d="M13.5 10.5L17.5 6.5" />
+                <path d="M10.5 13.5L6.5 17.5" />
             </svg>
-            <div class="login-title">Hysteria 面板</div>
+            <div class="login-title">Hysteria</div>
             <div class="input-group">
-                <input type="password" id="loginPassword" placeholder="请输入访问密码..."
+                <input type="text" id="loginUsername" placeholder="请输入账号..." style="margin-bottom: 16px;">
+                <input type="password" id="loginPassword" placeholder="请输入密码..."
                     onkeyup="if(event.key === 'Enter') checkLogin()">
             </div>
-            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 12px;"
+            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;"
                 onclick="checkLogin()">
                 登录验证
             </button>
-            <p id="loginError" style="color: var(--danger); margin-top: 10px; display: none; font-size: 14px;">密码错误，请重试
+            <p id="loginError" style="color: var(--danger); margin-top: 16px; display: none; font-size: 14px;">账号或密码错误，请重试
             </p>
         </div>
     </div>
 
     <!-- Main Content -->
-    <div class="container" id="mainApp" style="opacity: 0; transition: opacity 0.5s;">
-        <div class="header">
-            <div class="brand">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                Hysteria 面板
-            </div>
-            <div>
-                <button class="btn btn-danger" onclick="logout()">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+    <div id="mainApp" style="opacity: 0; transition: opacity 0.5s;">
+        <div class="app-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <circle cx="19" cy="5" r="2" />
+                        <circle cx="5" cy="5" r="2" />
+                        <circle cx="5" cy="19" r="2" />
+                        <circle cx="19" cy="19" r="2" />
+                        <path d="M10.5 10.5L6.5 6.5" />
+                        <path d="M13.5 13.5L17.5 17.5" />
+                        <path d="M13.5 10.5L17.5 6.5" />
+                        <path d="M10.5 13.5L6.5 17.5" />
                     </svg>
-                    退出登录
-                </button>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="layout-container">
-                <!-- Left Sidebar Menu -->
+                    <span>Hysteria</span>
+                </div>
+                
                 <div class="sidebar-menu">
                     <button class="menu-item active" onclick="switchTab('users')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -78,50 +83,71 @@
                     </button>
                 </div>
 
-                <!-- Right Content Area -->
-                <div class="content-area">
+                <div class="sidebar-footer">
+                    <button class="menu-item logout-btn" onclick="logout()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                        退出登录
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Content Area -->
+            <div class="main-content">
+                <div class="top-bar">
+                    <div class="page-title">管理控制台</div>
+                    <div class="user-info">
+                        <span>Admin</span>
+                        <div class="avatar">A</div>
+                    </div>
+                </div>
+
+                <div class="content-scroll-area">
                     <!-- Users Tab -->
                     <div id="usersTab" class="tab-content active">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px;">用户列表</h3>
-                    <button class="btn btn-primary" onclick="showAddUserModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        添加用户
-                    </button>
-                </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">用户列表</h3>
+                            <button class="btn btn-primary" onclick="showAddUserModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                添加用户
+                            </button>
+                        </div>
 
-                <div class="data-grid" id="userTable">
-                    <!-- Cards injected here -->
-                </div>
-            </div>
+                        <div class="data-grid" id="userTable">
+                            <!-- Cards injected here -->
+                        </div>
+                    </div>
 
-            <!-- Nodes Tab -->
-            <div id="nodesTab" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px;">节点列表</h3>
-                    <button class="btn btn-primary display flex" onclick="showAddNodeModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                        </svg>
-                        添加节点
-                    </button>
-                </div>
+                    <!-- Nodes Tab -->
+                    <div id="nodesTab" class="tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">节点列表</h3>
+                            <button class="btn btn-primary display flex" onclick="showAddNodeModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                添加节点
+                            </button>
+                        </div>
 
-                <div class="data-grid" id="nodeTable">
-                    <!-- Cards injected here -->
-                </div>
-            </div>
+                        <div class="data-grid" id="nodeTable">
+                            <!-- Cards injected here -->
+                        </div>
+                    </div>
 
-            <!-- Subscription Tab -->
-            <div id="subscriptionTab" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px;">VPN订阅管理</h3>
-                </div>
+                    <!-- Subscription Tab -->
+                    <div id="subscriptionTab" class="tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">VPN订阅管理</h3>
+                        </div>
 
-                <div class="data-grid" id="subscriptionTable">
-                    <!-- Subscription cards injected here -->
+                        <div class="data-grid" id="subscriptionTable">
+                            <!-- Subscription cards injected here -->
+                        </div>
                     </div>
                 </div>
             </div>
