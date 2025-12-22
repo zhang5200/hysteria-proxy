@@ -1,55 +1,121 @@
 // Config & Constants
 const USER_API = "/api/users";
 const NODE_API = "/api/nodes";
+const ADMIN_USER_API = "/api/admin-users";
 const TRAFFIC_BY_NODE_API = "/api/traffic/by-node";
-const LOGIN_USER = "admin";
-const LOGIN_PASS = "zx8257686@520";
+const LOGIN_API = "/api/login";
 
 let users = [];
 let nodes = [];
+let adminUsers = [];
 let trafficByNode = {};
 let editingUserId = null; // Track if we're editing a user
 let editingNodeId = null; // Track if we're editing a node
+let editingAdminUserId = null; // Track if we're editing an admin user
+let currentUserRole = null; // Current user's role
 
 // --- Auth Logic ---
-function checkLogin() {
+async function checkLogin() {
   const userInput = document.getElementById("loginUsername").value;
   const passInput = document.getElementById("loginPassword").value;
   const error = document.getElementById("loginError");
 
-  if (userInput === LOGIN_USER && passInput === LOGIN_PASS) {
-    // Success
-    document.getElementById("login-overlay").style.opacity = "0";
-    setTimeout(() => {
-      document.getElementById("login-overlay").style.display = "none";
-      document.getElementById("mainApp").style.opacity = "1";
-    }, 300);
-    sessionStorage.setItem("isLoggedIn", "true");
-    refreshUsers();
-  } else {
-    // Fail
+  try {
+    const res = await fetch(LOGIN_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: userInput,
+        password: passInput
+      })
+    });
+
+    const data = await res.json();
+
+    if (data.success) {
+      // Success
+      document.getElementById("login-overlay").style.opacity = "0";
+      setTimeout(() => {
+        document.getElementById("login-overlay").style.display = "none";
+        document.getElementById("mainApp").style.opacity = "1";
+      }, 300);
+      sessionStorage.setItem("isLoggedIn", "true");
+      sessionStorage.setItem("userRole", data.role);
+      sessionStorage.setItem("username", userInput);
+      currentUserRole = data.role;
+      
+      // Update UI based on role
+      updateUIForRole(data.role);
+      
+      // Load initial data
+      if (data.role === "admin") {
+        refreshUsers();
+      } else {
+        switchTab('subscription');
+      }
+    } else {
+      // Fail
+      error.textContent = data.message || "账号或密码错误，请重试";
+      error.style.display = "block";
+      document.getElementById("loginUsername").classList.add("error");
+      document.getElementById("loginPassword").classList.add("error");
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+    error.textContent = "登录失败，请稍后重试";
     error.style.display = "block";
-    if (userInput !== LOGIN_USER) document.getElementById("loginUsername").classList.add("error");
-    if (passInput !== LOGIN_PASS) document.getElementById("loginPassword").classList.add("error");
   }
 }
 
 function logout() {
   sessionStorage.removeItem("isLoggedIn");
+  sessionStorage.removeItem("userRole");
+  sessionStorage.removeItem("username");
   location.reload();
+}
+
+// Update UI based on user role
+function updateUIForRole(role) {
+  const menuItems = document.querySelectorAll(".menu-item");
+  const userInfo = document.querySelector(".user-info span");
+  const username = sessionStorage.getItem("username") || "User";
+  
+  if (userInfo) {
+    userInfo.textContent = username;
+  }
+
+  if (role === "user") {
+    // Hide user management, node management and account management for regular users
+    menuItems[0].style.display = "none"; // 用户管理
+    menuItems[1].style.display = "none"; // 节点管理
+    menuItems[2].style.display = "flex"; // VPN订阅
+    menuItems[3].style.display = "none"; // 账号管理
+  } else {
+    // Show all menus for admin
+    menuItems.forEach(item => item.style.display = "flex");
+  }
 }
 
 // Check auth on load
 window.addEventListener("load", () => {
   if (sessionStorage.getItem("isLoggedIn") === "true") {
+    const role = sessionStorage.getItem("userRole") || "user";
+    currentUserRole = role;
     document.getElementById("login-overlay").style.display = "none";
     document.getElementById("mainApp").style.opacity = "1";
-    refreshUsers();
+    updateUIForRole(role);
+    
+    if (role === "admin") {
+      refreshUsers();
+    } else {
+      switchTab('subscription');
+    }
   }
 });
 
 // --- Tab Logic ---
 function switchTab(tab) {
+  // Remove active class from all menu items and tabs
   document
     .querySelectorAll(".menu-item")
     .forEach((t) => t.classList.remove("active"));
@@ -57,18 +123,28 @@ function switchTab(tab) {
     .querySelectorAll(".tab-content")
     .forEach((c) => c.classList.remove("active"));
 
+  // Find and activate the correct menu item by checking onclick attribute
+  const menuItems = document.querySelectorAll(".menu-item");
+  menuItems.forEach((item) => {
+    const onclick = item.getAttribute("onclick");
+    if (onclick && onclick.includes(`'${tab}'`)) {
+      item.classList.add("active");
+    }
+  });
+
+  // Activate the corresponding tab content
   if (tab === "users") {
-    document.querySelectorAll(".menu-item")[0].classList.add("active");
     document.getElementById("usersTab").classList.add("active");
     loadUsers();
   } else if (tab === "nodes") {
-    document.querySelectorAll(".menu-item")[1].classList.add("active");
     document.getElementById("nodesTab").classList.add("active");
     loadNodes();
   } else if (tab === "subscription") {
-    document.querySelectorAll(".menu-item")[2].classList.add("active");
     document.getElementById("subscriptionTab").classList.add("active");
     loadSubscriptions();
+  } else if (tab === "account") {
+    document.getElementById("accountTab").classList.add("active");
+    loadAdminUsers();
   }
 }
 
@@ -122,6 +198,23 @@ function toggleDetail(username) {
   }
 }
 
+function toggleNodeTraffic(username) {
+  const container = document.getElementById(`node-traffic-${username}`);
+  const icon = document.getElementById(`toggle-icon-${username}`);
+  
+  if (container.style.maxHeight && container.style.maxHeight !== "0px") {
+    // Collapse
+    container.style.maxHeight = "0px";
+    icon.style.transform = "rotate(0deg)";
+    icon.style.color = "var(--text-secondary)";
+  } else {
+    // Expand
+    container.style.maxHeight = container.scrollHeight + "px";
+    icon.style.transform = "rotate(90deg)";
+    icon.style.color = "var(--primary)";
+  }
+}
+
 function renderUsers() {
   const container = document.getElementById("userTable");
   container.innerHTML = "";
@@ -136,24 +229,39 @@ function renderUsers() {
     let trafficHtml = "";
 
     if (hasTraffic) {
-      trafficHtml =
-        '<div class="traffic-grid" style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px;">';
+      const nodeCount = Object.keys(trafficByNode[user.username]).length;
+      trafficHtml = `
+        <div style="margin-top: 10px; border-top: 1px dashed var(--border); padding-top: 10px;">
+          <button class="btn" style="width: 100%; padding: 8px 12px; font-size: 12px; justify-content: space-between; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text-secondary)" 
+                  onclick="toggleNodeTraffic('${user.username}')">
+            <span style="display: flex; align-items: center; gap: 6px;">
+              <svg id="toggle-icon-${user.username}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" 
+                   style="width: 14px; height: 14px; transition: transform 0.2s; color: var(--text-secondary);">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              <span>各节点流量统计</
+            </span>
+            <span class="badge badge-primary" style="font-size: 11px;">${nodeCount} 个节点</span>
+          </button>
+          <div id="node-traffic-${user.username}" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
+            <div style="background: #f9fafb; border-radius: 6px; padding: 12px; margin-top: 8px;">
+      `;
       for (const [node, t] of Object.entries(trafficByNode[user.username])) {
         trafficHtml += `
-                    <div class="node-item" style="flex-direction:row; justify-content:space-between; align-items:center; gap: 12px; flex-wrap: wrap;">
-                        <span style="font-weight: 500; font-size: 12px; white-space: nowrap;">${node}</span>
-                        <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary); white-space: nowrap;">
-                            <span style="color: var(--success)">↑ ${formatBytes(
-                              t.tx
-                            )}</span> 
-                            <span style="color: var(--primary)">↓ ${formatBytes(
-                              t.rx
-                            )}</span>
-                        </span>
-                    </div>
-                 `;
+          <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0;">
+            <span style="font-weight: 500; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node}</span>
+            <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0;">
+              <span style="color: var(--success)">↑ ${formatBytes(t.tx)}</span> 
+              <span style="color: var(--primary); margin-left: 8px;">↓ ${formatBytes(t.rx)}</span>
+            </span>
+          </div>
+        `;
       }
-      trafficHtml += "</div>";
+      trafficHtml += `
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     // Calculate traffic usage
@@ -542,4 +650,144 @@ function closeNodeModal() {
 async function refreshUsers() {
   await loadTrafficByNode();
   await loadUsers();
+}
+
+// --- Admin User Management ---
+async function loadAdminUsers() {
+  try {
+    const res = await fetch(ADMIN_USER_API);
+    adminUsers = await res.json();
+    renderAdminUsers();
+  } catch (err) {
+    console.error("加载账号失败", err);
+  }
+}
+
+function renderAdminUsers() {
+  const container = document.getElementById("accountTable");
+  container.innerHTML = "";
+  
+  adminUsers.forEach((user) => {
+    const card = document.createElement("div");
+    card.className = "data-card";
+    
+    const isDefaultAdmin = user.username === "admin";
+    
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-title">
+          <div style="width:32px; height:32px; background:#eff6ff; color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
+            ${user.username.charAt(0).toUpperCase()}
+          </div>
+          ${user.username}
+        </div>
+        <span class="badge ${user.role === 'admin' ? 'badge-success' : 'badge-primary'}">${user.role === 'admin' ? '管理员' : '普通用户'}</span>
+      </div>
+      
+      <div class="card-row">
+        <span>创建时间:</span>
+        <span style="color: var(--text-secondary); font-size: 13px;">${new Date(user.created_at).toLocaleString()}</span>
+      </div>
+      
+      <div class="card-actions">
+        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="showEditAdminUserModal(${user.id})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          编辑
+        </button>
+        ${!isDefaultAdmin ? `
+          <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteAdminUser(${user.id})">删除</button>
+        ` : '<span style="color: var(--text-secondary); font-size: 12px;">默认管理员不可删除</span>'}
+      </div>
+    `;
+    container.appendChild(card);
+  });
+}
+
+async function saveAdminUser() {
+  const username = document.getElementById("adminUsernameInput").value;
+  const password = document.getElementById("adminPasswordInput").value;
+  const role = document.getElementById("adminRoleInput").value;
+
+  if (!username) {
+    alert("请输入用户名");
+    return;
+  }
+
+  if (!editingAdminUserId && !password) {
+    alert("请输入密码");
+    return;
+  }
+
+  try {
+    const payload = { username, role };
+    if (password) {
+      payload.password = password;
+    }
+
+    if (editingAdminUserId) {
+      // Update existing admin user
+      await fetch(`${ADMIN_USER_API}/${editingAdminUserId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } else {
+      // Create new admin user
+      await fetch(ADMIN_USER_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }
+    closeAdminUserModal();
+    loadAdminUsers();
+  } catch (e) {
+    alert("操作失败");
+  }
+}
+
+async function deleteAdminUser(id) {
+  if (!confirm("确认删除该账号吗？")) return;
+  
+  try {
+    const res = await fetch(`${ADMIN_USER_API}/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      loadAdminUsers();
+    } else {
+      const data = await res.json();
+      alert(data.message || "删除失败");
+    }
+  } catch (err) {
+    alert("删除失败");
+  }
+}
+
+function showAddAdminUserModal() {
+  editingAdminUserId = null;
+  document.getElementById("adminUserModalTitle").innerText = "添加账号";
+  document.getElementById("adminUserModal").classList.add("active");
+  document.getElementById("adminUsernameInput").value = "";
+  document.getElementById("adminPasswordInput").value = "";
+  document.getElementById("adminRoleInput").value = "user";
+  document.getElementById("adminPasswordInput").placeholder = "请输入密码";
+}
+
+function showEditAdminUserModal(id) {
+  const user = adminUsers.find((u) => u.id === id);
+  if (!user) return;
+
+  editingAdminUserId = id;
+  document.getElementById("adminUserModalTitle").innerText = "编辑账号";
+  document.getElementById("adminUserModal").classList.add("active");
+  document.getElementById("adminUsernameInput").value = user.username;
+  document.getElementById("adminPasswordInput").value = "";
+  document.getElementById("adminRoleInput").value = user.role;
+  document.getElementById("adminPasswordInput").placeholder = "留空则不修改密码";
+}
+
+function closeAdminUserModal() {
+  editingAdminUserId = null;
+  document.getElementById("adminUserModal").classList.remove("active");
 }

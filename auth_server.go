@@ -136,6 +136,9 @@ func initDB() {
 	// SQLite doesn't have IF NOT EXISTS for ALTER TABLE, so we handle errors gracefully
 	upgradeSchema()
 
+	// Initialize admin table
+	initAdminTable()
+
 	log.Println("Database initialized successfully")
 }
 
@@ -1133,6 +1136,13 @@ func main() {
 
 	// API - Authentication
 	http.HandleFunc("/auth", authHandler)
+
+	// API - Login
+	http.HandleFunc("/api/login", loginHandler)
+
+	// API - Admin User Management
+	http.HandleFunc("/api/admin-users", adminUsersHandler)
+	http.HandleFunc("/api/admin-users/", adminUserDetailHandler)
 
 	// API - User Management
 	http.HandleFunc("/api/users", usersHandler)

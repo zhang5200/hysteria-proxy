@@ -81,6 +81,14 @@
                         </svg>
                         VPN订阅
                     </button>
+                    <button class="menu-item" onclick="switchTab('account')">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        账号管理
+                    </button>
                 </div>
 
                 <div class="sidebar-footer">
@@ -149,6 +157,23 @@
                             <!-- Subscription cards injected here -->
                         </div>
                     </div>
+
+                    <!-- Account Management Tab -->
+                    <div id="accountTab" class="tab-content">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">账号管理</h3>
+                            <button class="btn btn-primary" onclick="showAddAdminUserModal()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                                添加账号
+                            </button>
+                        </div>
+
+                        <div class="data-grid" id="accountTable">
+                            <!-- Account cards injected here -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -206,6 +231,34 @@
             <div style="text-align: right; margin-top: 24px;">
                 <button class="btn btn-danger" onclick="closeNodeModal()" style="margin-right: 8px;">取消</button>
                 <button class="btn btn-primary" onclick="saveNode()">保存节点</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="adminUserModalTitle">添加账号</h3>
+                <span class="close-btn" onclick="closeAdminUserModal()">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="adminUsernameInput" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" id="adminPasswordInput" placeholder="请输入密码">
+            </div>
+            <div class="form-group">
+                <label>角色</label>
+                <select id="adminRoleInput" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px;">
+                    <option value="user">普通用户</option>
+                    <option value="admin">管理员</option>
+                </select>
+            </div>
+            <div style="text-align: right; margin-top: 24px;">
+                <button class="btn btn-danger" onclick="closeAdminUserModal()" style="margin-right: 8px;">取消</button>
+                <button class="btn btn-primary" onclick="saveAdminUser()">保存账号</button>
             </div>
         </div>
     </div>
