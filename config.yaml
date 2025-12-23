@@ -9,6 +9,12 @@ tls:
   key: /etc/hysteria/server.key
   alpn: ["h3"]
 
+# 2. 增加混淆配置 (Obfuscation)
+obfs:
+  type: salamander
+  salamander: # 【必须增加这一行】
+    password: "zx8257686@520" # 【缩进】密码要放在这里
+
 auth:
   type: http
   http:
