@@ -406,6 +406,18 @@ body {
   transform: translateY(-1px);
 }
 
+.btn-light {
+  background: #f1f5f9;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-light:hover {
+  background: #e2e8f0;
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
 .btn-danger {
   background: white;
   color: var(--danger);

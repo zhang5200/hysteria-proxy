@@ -76,28 +76,21 @@
                 </div>
 
                 <div class="sidebar-menu">
-                    <button class="menu-item active" onclick="switchTab('users')">
+                    <button class="menu-item active" data-tab="users" onclick="switchTab('users')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                         </svg>
                         用户管理
                     </button>
-                    <button class="menu-item" onclick="switchTab('nodes')">
+                    <button class="menu-item" data-tab="nodes" onclick="switchTab('nodes')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                         节点管理
                     </button>
-                    <button class="menu-item" onclick="switchTab('subscription')">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                        </svg>
-                        VPN订阅
-                    </button>
-                    <button class="menu-item" onclick="switchTab('account')">
+                    <button class="menu-item" data-tab="account" onclick="switchTab('account')">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -134,7 +127,7 @@
                         <div
                             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
                             <h3 style="margin: 0; font-size: 20px; font-weight: 700;">用户列表</h3>
-                            <button class="btn btn-primary" onclick="showAddUserModal()">
+                            <button class="btn btn-primary" id="addUserBtn" onclick="showAddUserModal()">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
                                 </svg>
@@ -162,18 +155,6 @@
 
                         <div class="data-grid" id="nodeTable">
                             <!-- Cards injected here -->
-                        </div>
-                    </div>
-
-                    <!-- Subscription Tab -->
-                    <div id="subscriptionTab" class="tab-content">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h3 style="margin: 0; font-size: 20px; font-weight: 700;">VPN订阅管理</h3>
-                        </div>
-
-                        <div class="data-grid" id="subscriptionTable">
-                            <!-- Subscription cards injected here -->
                         </div>
                     </div>
 
@@ -281,6 +262,16 @@
                 <button class="btn btn-danger" onclick="closeAdminUserModal()" style="margin-right: 8px;">取消</button>
                 <button class="btn btn-primary" onclick="saveAdminUser()">保存账号</button>
             </div>
+        </div>
+    </div>
+
+    <div id="subscriptionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="subscriptionModalTitle">订阅</h3>
+                <span class="close-btn" onclick="closeSubscriptionModal()">&times;</span>
+            </div>
+            <div id="subscriptionModalBody"></div>
         </div>
     </div>
 

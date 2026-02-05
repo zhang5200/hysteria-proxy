@@ -178,9 +178,19 @@ async function regenerateToken(userId) {
 
         if (res.ok) {
             alert('订阅链接已重新生成');
-            // Clear cache to force regeneration
-            cachedSubscriptions = null;
-            loadSubscriptions();
+            // Refresh subscription modal if present
+            if (typeof loadSubscriptionForUser === 'function') {
+                const modal = document.getElementById("subscriptionModal");
+                if (modal && modal.classList.contains("active")) {
+                    await loadSubscriptionForUser(userId);
+                } else {
+                    cachedSubscriptions = null;
+                    loadSubscriptions();
+                }
+            } else {
+                cachedSubscriptions = null;
+                loadSubscriptions();
+            }
         } else {
             alert('生成失败');
         }

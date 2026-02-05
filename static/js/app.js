@@ -13,6 +13,8 @@ let editingUserId = null; // Track if we're editing a user
 let editingNodeId = null; // Track if we're editing a node
 let editingAdminUserId = null; // Track if we're editing an admin user
 let currentUserRole = null; // Current user's role
+let currentSubscriptionUserId = null;
+let currentSubscriptionUsername = "";
 
 // --- Auth Logic ---
 async function checkLogin() {
@@ -51,7 +53,7 @@ async function checkLogin() {
       if (data.role === "admin") {
         refreshUsers();
       } else {
-        switchTab('subscription');
+        switchTab("users");
       }
     } else {
       // Fail
@@ -79,20 +81,25 @@ function updateUIForRole(role) {
   const menuItems = document.querySelectorAll(".menu-item");
   const userInfo = document.querySelector(".user-info span");
   const username = sessionStorage.getItem("username") || "User";
+  const usersMenu = document.querySelector('[data-tab="users"]');
+  const nodesMenu = document.querySelector('[data-tab="nodes"]');
+  const accountMenu = document.querySelector('[data-tab="account"]');
+  const addUserBtn = document.getElementById("addUserBtn");
   
   if (userInfo) {
     userInfo.textContent = username;
   }
 
   if (role === "user") {
-    // Hide user management, node management and account management for regular users
-    menuItems[0].style.display = "none"; // 用户管理
-    menuItems[1].style.display = "none"; // 节点管理
-    menuItems[2].style.display = "flex"; // VPN订阅
-    menuItems[3].style.display = "none"; // 账号管理
+    // Regular users only see their own subscription within the users tab
+    if (usersMenu) usersMenu.style.display = "flex";
+    if (nodesMenu) nodesMenu.style.display = "none";
+    if (accountMenu) accountMenu.style.display = "none";
+    if (addUserBtn) addUserBtn.style.display = "none";
   } else {
     // Show all menus for admin
     menuItems.forEach(item => item.style.display = "flex");
+    if (addUserBtn) addUserBtn.style.display = "flex";
   }
 }
 
@@ -108,7 +115,7 @@ window.addEventListener("load", () => {
     if (role === "admin") {
       refreshUsers();
     } else {
-      switchTab('subscription');
+      switchTab("users");
     }
   }
 });
@@ -123,11 +130,10 @@ function switchTab(tab) {
     .querySelectorAll(".tab-content")
     .forEach((c) => c.classList.remove("active"));
 
-  // Find and activate the correct menu item by checking onclick attribute
+  // Find and activate the correct menu item by data-tab
   const menuItems = document.querySelectorAll(".menu-item");
   menuItems.forEach((item) => {
-    const onclick = item.getAttribute("onclick");
-    if (onclick && onclick.includes(`'${tab}'`)) {
+    if (item.dataset.tab === tab) {
       item.classList.add("active");
     }
   });
@@ -139,9 +145,6 @@ function switchTab(tab) {
   } else if (tab === "nodes") {
     document.getElementById("nodesTab").classList.add("active");
     loadNodes();
-  } else if (tab === "subscription") {
-    document.getElementById("subscriptionTab").classList.add("active");
-    loadSubscriptions();
   } else if (tab === "account") {
     document.getElementById("accountTab").classList.add("active");
     loadAdminUsers();
@@ -219,6 +222,11 @@ function renderUsers() {
   const container = document.getElementById("userTable");
   container.innerHTML = "";
   users.forEach((user) => {
+    const viewerUsername = sessionStorage.getItem("username");
+    if (currentUserRole === "user" && user.username !== viewerUsername) {
+      return;
+    }
+
     const card = document.createElement("div");
     card.className = "data-card";
 
@@ -317,6 +325,11 @@ function renderUsers() {
                         ${user.username.charAt(0).toUpperCase()}
                     </div>
                     ${user.username}
+                    <button class="btn btn-light" style="padding: 4px 10px; font-size: 12px;" onclick="showSubscriptionModal(${user.id}, ${JSON.stringify(
+                  user.username
+                )})" title="订阅">
+                        订阅
+                    </button>
                 </div>
                 <span class="badge ${
                   user.enabled ? "badge-success" : "badge-danger"
@@ -346,41 +359,114 @@ function renderUsers() {
             
             ${trafficHtml}
 
+            ${
+              currentUserRole === "admin"
+                ? `
             <div class="card-actions">
-                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="showEditUserModal(${
-                  user.id
-                })">
+                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="showEditUserModal(${user.id})">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                     </svg>
                     编辑
                 </button>
-                <button class="btn ${
-                  user.enabled ? "btn-danger" : "btn-success"
-                }" style="padding: 6px 12px; font-size: 12px;" onclick="toggleUser(${
-      user.id
-    }, ${!user.enabled})">
+                <button class="btn ${user.enabled ? "btn-danger" : "btn-success"}" style="padding: 6px 12px; font-size: 12px;" onclick="toggleUser(${user.id}, ${!user.enabled})">
                     ${user.enabled ? "禁用" : "启用"}
                 </button>
                 ${
                   trafficLimit > 0
                     ? `
-                    <button class="btn btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="resetUserTraffic(${user.id})">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        重置流量
-                    </button>
+                <button class="btn btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="resetUserTraffic(${user.id})">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    重置流量
+                </button>
                 `
                     : ""
                 }
-                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteUser(${
-                  user.id
-                })">删除</button>
+                <button class="btn btn-danger" style="padding: 6px 12px; font-size: 12px;" onclick="deleteUser(${user.id})">删除</button>
             </div>
+            `
+                : ""
+            }
         `;
     container.appendChild(card);
   });
+}
+
+function showSubscriptionModal(userId, username) {
+  currentSubscriptionUserId = userId;
+  currentSubscriptionUsername = username;
+
+  const modal = document.getElementById("subscriptionModal");
+  const title = document.getElementById("subscriptionModalTitle");
+  if (title) {
+    title.textContent = `订阅 - ${username}`;
+  }
+  if (modal) {
+    modal.classList.add("active");
+  }
+
+  loadSubscriptionForUser(userId, username);
+}
+
+function closeSubscriptionModal() {
+  const modal = document.getElementById("subscriptionModal");
+  if (modal) {
+    modal.classList.remove("active");
+  }
+  currentSubscriptionUserId = null;
+  currentSubscriptionUsername = "";
+}
+
+async function loadSubscriptionForUser(userId, username) {
+  const body = document.getElementById("subscriptionModalBody");
+  if (!body) return;
+  body.innerHTML = `<div style="color: var(--text-secondary); font-size: 12px;">加载订阅中...</div>`;
+
+  try {
+    const res = await fetch(`${USER_API}/${userId}/subscription`);
+    const data = await res.json();
+    const subscriptionUrl = data.url || "";
+
+    body.innerHTML = `
+      <div style="margin-top: 4px;">
+          <label style="font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 8px;">订阅链接</label>
+          <div class="subscription-url">
+              <input type="text" readonly value="${subscriptionUrl}" id="sub-url-${userId}" style="font-size: 11px;">
+              <button class="btn btn-primary" style="padding: 8px 12px; font-size: 12px;" onclick="copySubscriptionUrl(${userId})">
+                  复制
+              </button>
+          </div>
+      </div>
+
+      <div class="qr-code-container" id="qr-${userId}">
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-main);">扫描二维码订阅</div>
+          <div id="qr-canvas-${userId}" style="display: inline-block;"></div>
+      </div>
+
+      ${
+        currentUserRole === "admin"
+          ? `
+      <div class="card-actions" style="margin-top: 12px;">
+          <button class="btn btn-success" style="padding: 6px 12px; font-size: 12px;" onclick="regenerateToken(${userId})">
+              重新生成链接
+          </button>
+      </div>
+      `
+          : ""
+      }
+    `;
+
+    if (subscriptionUrl) {
+      setTimeout(() => {
+        generateQRCode(`qr-canvas-${userId}`, subscriptionUrl);
+      }, 0);
+    }
+  } catch (err) {
+    console.error("加载订阅失败", err);
+    body.innerHTML = `<div style="color: var(--danger); font-size: 12px;">订阅加载失败</div>`;
+  }
 }
 
 // --- Actions ---
