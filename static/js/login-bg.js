@@ -14,12 +14,21 @@
     // Configuration
     const config = {
         particleCount: 80,
-        particleColor: 'rgba(15, 23, 42, 0.15)', // Dark text color with opacity
+        particleColor: 'rgba(15, 23, 42, 0.15)',
         lineColor: 'rgba(15, 23, 42, 0.15)',
         particleSize: 2,
         connectionDistance: 150,
         speed: 0.5
     };
+
+    function updateThemeColors() {
+        const style = getComputedStyle(document.documentElement);
+        const particleColor = style.getPropertyValue('--particle-color').trim();
+        const lineColor = style.getPropertyValue('--line-color').trim();
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        config.particleColor = particleColor || (isDark ? 'rgba(125, 211, 252, 0.55)' : 'rgba(15, 23, 42, 0.15)');
+        config.lineColor = lineColor || (isDark ? 'rgba(56, 189, 248, 0.35)' : 'rgba(15, 23, 42, 0.15)');
+    }
 
     // Particle Class
     class Particle {
@@ -50,6 +59,7 @@
 
     // Initialize
     function init() {
+        updateThemeColors();
         resize();
         createParticles();
         animate();
@@ -107,6 +117,14 @@
         resize();
         createParticles();
     });
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = () => updateThemeColors();
+    if (media.addEventListener) {
+        media.addEventListener('change', handleThemeChange);
+    } else if (media.addListener) {
+        media.addListener(handleThemeChange);
+    }
 
     init();
 })();

@@ -252,12 +252,12 @@ function renderUsers() {
             <span class="badge badge-primary" style="font-size: 11px;">${nodeCount} 个节点</span>
           </button>
           <div id="node-traffic-${user.username}" style="max-height: 0; overflow: hidden; transition: max-height 0.3s ease;">
-            <div style="background: #f9fafb; border-radius: 6px; padding: 12px; margin-top: 8px;">
+            <div style="background: var(--bg-surface-soft); border-radius: 6px; padding: 12px; margin-top: 8px;">
       `;
       for (const [node, t] of Object.entries(trafficByNode[user.username])) {
         trafficHtml += `
           <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0;">
-            <span style="font-weight: 500; font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node}</span>
+            <span style="font-weight: 500; font-size: 12px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${node}</span>
             <span style="font-family: monospace; font-size: 11px; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0;">
               <span style="color: var(--success)">↑ ${formatBytes(t.tx)}</span> 
               <span style="color: var(--primary); margin-left: 8px;">↓ ${formatBytes(t.rx)}</span>
@@ -300,7 +300,7 @@ function renderUsers() {
                             ${percentage}%
                         </span>
                     </div>
-                    <div style="background: #e5e7eb; border-radius: 4px; overflow: hidden; height: 6px;">
+                    <div style="background: var(--progress-track); border-radius: 4px; overflow: hidden; height: 6px;">
                         <div style="background: ${
                           isExceeded ? "var(--danger)" : "var(--primary)"
                         }; 
@@ -321,7 +321,7 @@ function renderUsers() {
     card.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    <div style="width:32px; height:32px; background:#eff6ff; color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
+                    <div style="width:32px; height:32px; background:var(--bg-avatar); color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
                         ${user.username.charAt(0).toUpperCase()}
                     </div>
                     ${user.username}
@@ -755,7 +755,7 @@ function renderAdminUsers() {
     card.innerHTML = `
       <div class="card-header">
         <div class="card-title">
-          <div style="width:32px; height:32px; background:#eff6ff; color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
+          <div style="width:32px; height:32px; background:var(--bg-avatar); color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
             ${user.username.charAt(0).toUpperCase()}
           </div>
           ${user.username}

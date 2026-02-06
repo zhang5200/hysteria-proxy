@@ -69,7 +69,7 @@ async function renderSubscriptions(users, userCards) {
         card.innerHTML = `
             <div class="card-header">
                 <div class="card-title">
-                    <div style="width:32px; height:32px; background:#eff6ff; color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
+                    <div style="width:32px; height:32px; background:var(--bg-avatar); color:var(--primary); border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px;">
                         ${username.charAt(0).toUpperCase()}
                     </div>
                     ${username}
@@ -150,6 +150,10 @@ function generateQRCode(canvasId, text) {
     if (!container || !text) return;
 
     try {
+        const style = getComputedStyle(document.documentElement);
+        const colorDark = style.getPropertyValue('--qr-dark').trim() || '#111827';
+        const colorLight = style.getPropertyValue('--qr-light').trim() || '#ffffff';
+
         // Clear previous QR code if exists
         container.innerHTML = '';
         
@@ -158,8 +162,8 @@ function generateQRCode(canvasId, text) {
             text: text,
             width: 200,
             height: 200,
-            colorDark: '#111827',
-            colorLight: '#ffffff',
+            colorDark,
+            colorLight,
             correctLevel: QRCode.CorrectLevel.M
         });
     } catch (err) {
@@ -198,4 +202,20 @@ async function regenerateToken(userId) {
         console.error('Token generation error:', err);
         alert('生成失败');
     }
+}
+
+// Refresh visible subscription QR when system theme changes.
+const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+const refreshThemeSensitiveSubscription = () => {
+    if (typeof currentSubscriptionUserId !== 'undefined' &&
+        currentSubscriptionUserId &&
+        typeof loadSubscriptionForUser === 'function') {
+        loadSubscriptionForUser(currentSubscriptionUserId);
+    }
+};
+
+if (themeMedia.addEventListener) {
+    themeMedia.addEventListener('change', refreshThemeSensitiveSubscription);
+} else if (themeMedia.addListener) {
+    themeMedia.addListener(refreshThemeSensitiveSubscription);
 }
