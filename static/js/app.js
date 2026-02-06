@@ -325,9 +325,7 @@ function renderUsers() {
                         ${user.username.charAt(0).toUpperCase()}
                     </div>
                     ${user.username}
-                    <button class="btn btn-light" style="padding: 4px 10px; font-size: 12px;" onclick="showSubscriptionModal(${user.id}, ${JSON.stringify(
-                  user.username
-                )})" title="订阅">
+                    <button class="btn btn-light" style="padding: 4px 10px; font-size: 12px;" onclick="showSubscriptionModal(${user.id})" title="订阅">
                         订阅
                     </button>
                 </div>
@@ -394,7 +392,9 @@ function renderUsers() {
   });
 }
 
-function showSubscriptionModal(userId, username) {
+function showSubscriptionModal(userId) {
+  const user = users.find((u) => u.id === userId);
+  const username = user ? user.username : "";
   currentSubscriptionUserId = userId;
   currentSubscriptionUsername = username;
 
@@ -407,7 +407,7 @@ function showSubscriptionModal(userId, username) {
     modal.classList.add("active");
   }
 
-  loadSubscriptionForUser(userId, username);
+  loadSubscriptionForUser(userId);
 }
 
 function closeSubscriptionModal() {
@@ -419,7 +419,7 @@ function closeSubscriptionModal() {
   currentSubscriptionUsername = "";
 }
 
-async function loadSubscriptionForUser(userId, username) {
+async function loadSubscriptionForUser(userId) {
   const body = document.getElementById("subscriptionModalBody");
   if (!body) return;
   body.innerHTML = `<div style="color: var(--text-secondary); font-size: 12px;">加载订阅中...</div>`;
