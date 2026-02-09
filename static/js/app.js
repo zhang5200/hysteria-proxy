@@ -4,6 +4,8 @@ const NODE_API = "/api/nodes";
 const ADMIN_USER_API = "/api/admin-users";
 const TRAFFIC_BY_NODE_API = "/api/traffic/by-node";
 const LOGIN_API = "/api/login";
+const REGISTER_API = "/api/register";
+const CHANGE_PASSWORD_API = "/api/change-password";
 
 let users = [];
 let nodes = [];
@@ -16,6 +18,48 @@ let currentUserRole = null; // Current user's role
 let currentSubscriptionUserId = null;
 let currentSubscriptionUsername = "";
 
+const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{3,19}$/;
+
+function validateUsernameFormat(username) {
+  if (!USERNAME_PATTERN.test(username)) {
+    return "用户名格式不正确：需4-20位，以字母开头，只能包含字母、数字、下划线";
+  }
+  return "";
+}
+
+function validatePasswordFormat(password) {
+  if (password.length < 8 || password.length > 32) {
+    return "密码格式不正确：长度需为8-32位";
+  }
+  if (/\s/.test(password)) {
+    return "密码不能包含空格";
+  }
+  if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+    return "密码需包含大写字母、小写字母、数字和特殊字符";
+  }
+  if (/[^\x20-\x7E]/.test(password)) {
+    return "密码仅支持英文字符";
+  }
+  return "";
+}
+
+function apiFetch(url, options = {}) {
+  const { includeAuth = true, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers || {});
+
+  if (includeAuth) {
+    const username = sessionStorage.getItem("username");
+    if (username) {
+      headers.set("X-Auth-Username", username);
+    }
+  }
+
+  return fetch(url, {
+    ...fetchOptions,
+    headers,
+  });
+}
+
 // --- Auth Logic ---
 async function checkLogin() {
   const userInput = document.getElementById("loginUsername").value;
@@ -23,7 +67,8 @@ async function checkLogin() {
   const error = document.getElementById("loginError");
 
   try {
-    const res = await fetch(LOGIN_API, {
+    const res = await apiFetch(LOGIN_API, {
+      includeAuth: false,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -43,7 +88,7 @@ async function checkLogin() {
       }, 300);
       sessionStorage.setItem("isLoggedIn", "true");
       sessionStorage.setItem("userRole", data.role);
-      sessionStorage.setItem("username", userInput);
+      sessionStorage.setItem("username", data.username || userInput);
       currentUserRole = data.role;
       
       // Update UI based on role
@@ -66,6 +111,169 @@ async function checkLogin() {
     console.error("Login error:", err);
     error.textContent = "登录失败，请稍后重试";
     error.style.display = "block";
+  }
+}
+
+async function registerAccount() {
+  const userInput = document.getElementById("registerUsername").value.trim();
+  const passInput = document.getElementById("registerPassword").value;
+  const error = document.getElementById("registerError");
+
+  if (!userInput || !passInput) {
+    error.textContent = "请先填写账号和密码";
+    error.style.display = "block";
+    return;
+  }
+  const usernameMsg = validateUsernameFormat(userInput);
+  if (usernameMsg) {
+    error.textContent = usernameMsg;
+    error.style.display = "block";
+    return;
+  }
+  const passwordMsg = validatePasswordFormat(passInput);
+  if (passwordMsg) {
+    error.textContent = passwordMsg;
+    error.style.display = "block";
+    return;
+  }
+
+  try {
+    const res = await apiFetch(REGISTER_API, {
+      includeAuth: false,
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: userInput,
+        password: passInput,
+      }),
+    });
+
+    if (res.ok) {
+      error.style.display = "none";
+      closeRegisterModal();
+      document.getElementById("loginUsername").value = userInput;
+      document.getElementById("loginPassword").value = passInput;
+      await checkLogin();
+      return;
+    }
+
+    const text = await res.text();
+    error.textContent = text || "注册失败";
+    error.style.display = "block";
+  } catch (err) {
+    console.error("Register error:", err);
+    error.textContent = "注册失败，请稍后重试";
+    error.style.display = "block";
+  }
+}
+
+function showRegisterModal() {
+  const modal = document.getElementById("registerModal");
+  const registerUserInput = document.getElementById("registerUsername");
+  const registerPassInput = document.getElementById("registerPassword");
+  const error = document.getElementById("registerError");
+
+  if (error) {
+    error.textContent = "";
+    error.style.display = "none";
+  }
+
+  if (registerUserInput) {
+    registerUserInput.value = document.getElementById("loginUsername").value.trim();
+  }
+  if (registerPassInput) {
+    registerPassInput.value = document.getElementById("loginPassword").value;
+  }
+
+  if (modal) {
+    modal.classList.add("active");
+  }
+}
+
+function closeRegisterModal() {
+  const modal = document.getElementById("registerModal");
+  if (modal) {
+    modal.classList.remove("active");
+  }
+}
+
+function showChangePasswordModal() {
+  if (sessionStorage.getItem("isLoggedIn") !== "true") {
+    return;
+  }
+
+  const modal = document.getElementById("changePasswordModal");
+  const usernameInput = document.getElementById("changePasswordUsername");
+  const passwordInput = document.getElementById("changePasswordInput");
+  const error = document.getElementById("changePasswordError");
+
+  if (usernameInput) {
+    usernameInput.value = sessionStorage.getItem("username") || "";
+  }
+  if (passwordInput) {
+    passwordInput.value = "";
+  }
+  if (error) {
+    error.textContent = "";
+    error.style.display = "none";
+  }
+  if (modal) {
+    modal.classList.add("active");
+  }
+}
+
+function closeChangePasswordModal() {
+  const modal = document.getElementById("changePasswordModal");
+  if (modal) {
+    modal.classList.remove("active");
+  }
+}
+
+async function submitChangePassword() {
+  const passwordInput = document.getElementById("changePasswordInput");
+  const error = document.getElementById("changePasswordError");
+  const newPassword = passwordInput ? passwordInput.value : "";
+
+  if (!newPassword) {
+    if (error) {
+      error.textContent = "请输入新密码";
+      error.style.display = "block";
+    }
+    return;
+  }
+  const passwordMsg = validatePasswordFormat(newPassword);
+  if (passwordMsg) {
+    if (error) {
+      error.textContent = passwordMsg;
+      error.style.display = "block";
+    }
+    return;
+  }
+
+  try {
+    const res = await apiFetch(CHANGE_PASSWORD_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+
+    if (res.ok) {
+      closeChangePasswordModal();
+      alert("密码修改成功");
+      return;
+    }
+
+    const text = await res.text();
+    if (error) {
+      error.textContent = text || "修改失败";
+      error.style.display = "block";
+    }
+  } catch (err) {
+    console.error("Change password error:", err);
+    if (error) {
+      error.textContent = "修改失败，请稍后重试";
+      error.style.display = "block";
+    }
   }
 }
 
@@ -154,7 +362,7 @@ function switchTab(tab) {
 // --- Data Logic ---
 async function loadUsers() {
   try {
-    const res = await fetch(USER_API);
+    const res = await apiFetch(USER_API);
     users = await res.json();
     renderUsers();
   } catch (err) {
@@ -164,7 +372,7 @@ async function loadUsers() {
 
 async function loadTrafficByNode() {
   try {
-    const res = await fetch(TRAFFIC_BY_NODE_API);
+    const res = await apiFetch(TRAFFIC_BY_NODE_API);
     const data = await res.json();
     trafficByNode = {};
     data.forEach((entry) => {
@@ -418,7 +626,7 @@ async function loadSubscriptionForUser(userId) {
   body.innerHTML = `<div style="color: var(--text-secondary); font-size: 12px;">加载订阅中...</div>`;
 
   try {
-    const res = await fetch(`${USER_API}/${userId}/subscription`);
+    const res = await apiFetch(`${USER_API}/${userId}/subscription`);
     const data = await res.json();
     const subscriptionUrl = data.url || "";
 
@@ -472,6 +680,10 @@ async function saveUser() {
   const autoDisable = document.getElementById("autoDisableInput").checked;
 
   if (!u || !p) return alert("请填写完整");
+  const usernameMsg = validateUsernameFormat(u.trim());
+  if (usernameMsg) return alert(usernameMsg);
+  const passwordMsg = validatePasswordFormat(p);
+  if (passwordMsg) return alert(passwordMsg);
 
   // Convert GB to bytes
   const trafficLimitBytes = trafficLimitGB * 1024 ** 3;
@@ -480,7 +692,7 @@ async function saveUser() {
     if (editingUserId) {
       // Update existing user - get current user to preserve enabled status
       const currentUser = users.find((user) => user.id === editingUserId);
-      await fetch(`${USER_API}/${editingUserId}`, {
+      await apiFetch(`${USER_API}/${editingUserId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -493,7 +705,7 @@ async function saveUser() {
       });
     } else {
       // Create new user
-      await fetch(USER_API, {
+      await apiFetch(USER_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -513,14 +725,14 @@ async function saveUser() {
 
 async function deleteUser(id) {
   if (!confirm("确认删除该用户吗？")) return;
-  await fetch(`${USER_API}/${id}`, { method: "DELETE" });
+  await apiFetch(`${USER_API}/${id}`, { method: "DELETE" });
   loadUsers();
 }
 
 async function toggleUser(id, enabled) {
   const user = users.find((u) => u.id === id);
   if (!user) return;
-  await fetch(`${USER_API}/${id}`, {
+  await apiFetch(`${USER_API}/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -542,7 +754,7 @@ async function resetUserTraffic(id) {
     return;
 
   try {
-    const res = await fetch(`${USER_API}/${id}/reset-traffic`, {
+    const res = await apiFetch(`${USER_API}/${id}/reset-traffic`, {
       method: "POST",
     });
     if (res.ok) {
@@ -559,7 +771,7 @@ async function resetUserTraffic(id) {
 
 // --- Node Logic (Similar) ---
 async function loadNodes() {
-  const res = await fetch(NODE_API);
+  const res = await apiFetch(NODE_API);
   nodes = await res.json();
   const container = document.getElementById("nodeTable");
   container.innerHTML = "";
@@ -626,7 +838,7 @@ async function saveNode() {
     if (editingNodeId) {
       // Update existing node - get current node to preserve enabled status
       const currentNode = nodes.find((node) => node.id === editingNodeId);
-      await fetch(`${NODE_API}/${editingNodeId}`, {
+      await apiFetch(`${NODE_API}/${editingNodeId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -638,7 +850,7 @@ async function saveNode() {
       });
     } else {
       // Create new node
-      await fetch(NODE_API, {
+      await apiFetch(NODE_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, host, secret }),
@@ -653,12 +865,12 @@ async function saveNode() {
 
 async function deleteNode(id) {
   if (!confirm("删除节点将清除相关流量数据，确定吗？")) return;
-  await fetch(`${NODE_API}/${id}`, { method: "DELETE" });
+  await apiFetch(`${NODE_API}/${id}`, { method: "DELETE" });
   loadNodes();
 }
 
 async function toggleNode(id, enabled, name, host, secret) {
-  await fetch(`${NODE_API}/${id}`, {
+  await apiFetch(`${NODE_API}/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name, host, secret, enabled }),
@@ -734,7 +946,7 @@ async function refreshUsers() {
 // --- Admin User Management ---
 async function loadAdminUsers() {
   try {
-    const res = await fetch(ADMIN_USER_API);
+    const res = await apiFetch(ADMIN_USER_API);
     adminUsers = await res.json();
     renderAdminUsers();
   } catch (err) {
@@ -793,10 +1005,22 @@ async function saveAdminUser() {
     alert("请输入用户名");
     return;
   }
+  const usernameMsg = validateUsernameFormat(username.trim());
+  if (usernameMsg) {
+    alert(usernameMsg);
+    return;
+  }
 
   if (!editingAdminUserId && !password) {
     alert("请输入密码");
     return;
+  }
+  if (password) {
+    const passwordMsg = validatePasswordFormat(password);
+    if (passwordMsg) {
+      alert(passwordMsg);
+      return;
+    }
   }
 
   try {
@@ -807,14 +1031,14 @@ async function saveAdminUser() {
 
     if (editingAdminUserId) {
       // Update existing admin user
-      await fetch(`${ADMIN_USER_API}/${editingAdminUserId}`, {
+      await apiFetch(`${ADMIN_USER_API}/${editingAdminUserId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
     } else {
       // Create new admin user
-      await fetch(ADMIN_USER_API, {
+      await apiFetch(ADMIN_USER_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -831,7 +1055,7 @@ async function deleteAdminUser(id) {
   if (!confirm("确认删除该账号吗？")) return;
   
   try {
-    const res = await fetch(`${ADMIN_USER_API}/${id}`, { method: "DELETE" });
+    const res = await apiFetch(`${ADMIN_USER_API}/${id}`, { method: "DELETE" });
     if (res.ok) {
       loadAdminUsers();
     } else {

@@ -272,10 +272,19 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func usersHandler(w http.ResponseWriter, r *http.Request) {
+	reqUser, ok := requireRequestUser(w, r)
+	if !ok {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
-		getUsers(w, r)
+		getUsers(w, r, reqUser)
 	case http.MethodPost:
+		if reqUser.Role != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		createUser(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -283,45 +292,88 @@ func usersHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func userDetailHandler(w http.ResponseWriter, r *http.Request) {
+	reqUser, ok := requireRequestUser(w, r)
+	if !ok {
+		return
+	}
+
 	// Simple path parsing /api/users/{id} or /api/users/{id}/reset-traffic or /api/users/{id}/subscription or /api/users/{id}/generate-token
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 4 {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
+	id := parts[3]
 
 	// Check if this is a reset-traffic request
 	if len(parts) >= 5 && parts[4] == "reset-traffic" {
+		if reqUser.Role != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		resetUserTrafficHandler(w, r)
 		return
 	}
 
 	// Check if this is a subscription request
 	if len(parts) >= 5 && parts[4] == "subscription" {
+		if reqUser.Role != "admin" {
+			var username string
+			err := db.QueryRow("SELECT username FROM users WHERE id = ?", id).Scan(&username)
+			if err == sql.ErrNoRows {
+				http.Error(w, "User not found", http.StatusNotFound)
+				return
+			}
+			if err != nil {
+				http.Error(w, "Database error", http.StatusInternalServerError)
+				return
+			}
+			if username != reqUser.Username {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+				return
+			}
+		}
 		getUserSubscriptionHandler(w, r)
 		return
 	}
 
 	// Check if this is a generate-token request
 	if len(parts) >= 5 && parts[4] == "generate-token" {
+		if reqUser.Role != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		generateTokenHandler(w, r)
 		return
 	}
 
-	id := parts[3]
-
 	switch r.Method {
 	case http.MethodPut:
+		if reqUser.Role != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		updateUser(w, r, id)
 	case http.MethodDelete:
+		if reqUser.Role != "admin" {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
 		deleteUser(w, r, id)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-func getUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := db.Query("SELECT id, username, password, enabled, created_at, traffic_limit, auto_disable_on_limit FROM users")
+func getUsers(w http.ResponseWriter, r *http.Request, reqUser *RequestUser) {
+	query := "SELECT id, username, password, enabled, created_at, traffic_limit, auto_disable_on_limit FROM users"
+	var rows *sql.Rows
+	var err error
+	if reqUser.Role == "admin" {
+		rows, err = db.Query(query)
+	} else {
+		rows, err = db.Query(query+" WHERE username = ?", reqUser.Username)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -338,11 +390,22 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch aggregated traffic stats from database (across all nodes)
-	trafficRows, err := db.Query(`
+	trafficQuery := `
 		SELECT username, SUM(tx) as total_tx, SUM(rx) as total_rx
 		FROM traffic_stats
-		GROUP BY username
-	`)
+	`
+	if reqUser.Role == "admin" {
+		trafficQuery += " GROUP BY username"
+	} else {
+		trafficQuery += " WHERE username = ? GROUP BY username"
+	}
+
+	var trafficRows *sql.Rows
+	if reqUser.Role == "admin" {
+		trafficRows, err = db.Query(trafficQuery)
+	} else {
+		trafficRows, err = db.Query(trafficQuery, reqUser.Username)
+	}
 	if err == nil {
 		defer trafficRows.Close()
 		trafficStats := make(map[string]map[string]int64)
@@ -373,6 +436,19 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	u.Username = strings.TrimSpace(u.Username)
+	if u.Username == "" || u.Password == "" {
+		http.Error(w, "Username and password are required", http.StatusBadRequest)
+		return
+	}
+	if err := validateUsername(u.Username); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := validatePassword(u.Password); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Set default values if not provided
 	if u.TrafficLimit == 0 {
@@ -395,9 +471,30 @@ func updateUser(w http.ResponseWriter, r *http.Request, id string) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if u.Password == "" {
+		http.Error(w, "Password is required", http.StatusBadRequest)
+		return
+	}
+
+	var currentPassword string
+	err := db.QueryRow("SELECT password FROM users WHERE id = ?", id).Scan(&currentPassword)
+	if err == sql.ErrNoRows {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
+	if u.Password != currentPassword {
+		if err := validatePassword(u.Password); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
 
 	// Update all user fields including traffic limit settings
-	_, err := db.Exec("UPDATE users SET password = ?, enabled = ?, traffic_limit = ?, auto_disable_on_limit = ? WHERE id = ?",
+	_, err = db.Exec("UPDATE users SET password = ?, enabled = ?, traffic_limit = ?, auto_disable_on_limit = ? WHERE id = ?",
 		u.Password, u.Enabled, u.TrafficLimit, u.AutoDisableOnLimit, id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -418,6 +515,10 @@ func deleteUser(w http.ResponseWriter, r *http.Request, id string) {
 // ------ Node Management Handlers ------
 
 func nodesHandler(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+
 	switch r.Method {
 	case http.MethodGet:
 		getNodes(w, r)
@@ -429,6 +530,10 @@ func nodesHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func nodeDetailHandler(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+
 	// Simple path parsing /api/nodes/{id}
 	parts := strings.Split(r.URL.Path, "/")
 	if len(parts) < 4 {
@@ -512,6 +617,10 @@ func deleteNode(w http.ResponseWriter, r *http.Request, id string) {
 // ------ Traffic Aggregation Handlers ------
 
 func trafficAggregatedHandler(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -547,6 +656,10 @@ func trafficAggregatedHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func trafficByNodeHandler(w http.ResponseWriter, r *http.Request) {
+	if _, ok := requireAdmin(w, r); !ok {
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -1139,6 +1252,8 @@ func main() {
 
 	// API - Login
 	http.HandleFunc("/api/login", loginHandler)
+	http.HandleFunc("/api/register", registerHandler)
+	http.HandleFunc("/api/change-password", changePasswordHandler)
 
 	// API - Admin User Management
 	http.HandleFunc("/api/admin-users", adminUsersHandler)

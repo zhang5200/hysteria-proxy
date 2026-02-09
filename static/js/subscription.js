@@ -6,14 +6,14 @@ let cachedSubscriptions = null;
 // Load subscriptions for all users
 async function loadSubscriptions() {
     try {
-        const res = await fetch(USER_API);
+        const res = await apiFetch(USER_API);
         const users = await res.json();
         
         // Get subscription URLs for all users
         const newSubscriptions = await Promise.all(users.map(async (user) => {
             let subscriptionUrl = '';
             try {
-                const res = await fetch(`${USER_API}/${user.id}/subscription`);
+                const res = await apiFetch(`${USER_API}/${user.id}/subscription`);
                 const data = await res.json();
                 subscriptionUrl = data.url || '';
             } catch (err) {
@@ -176,7 +176,7 @@ async function regenerateToken(userId) {
     if (!confirm('重新生成订阅链接将使旧链接失效，确定继续吗？')) return;
 
     try {
-        const res = await fetch(`${USER_API}/${userId}/generate-token`, {
+        const res = await apiFetch(`${USER_API}/${userId}/generate-token`, {
             method: 'POST'
         });
 

@@ -44,13 +44,45 @@
                         onkeyup="if(event.key === 'Enter') checkLogin()">
                 </div>
             </div>
-            <button class="btn btn-primary" style="width: 100%; justify-content: center; padding: 14px;"
-                onclick="checkLogin()">
-                登录验证
-            </button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-primary" style="flex: 1; justify-content: center; padding: 14px;"
+                    onclick="checkLogin()">
+                    登录验证
+                </button>
+                <button class="btn btn-light" style="flex: 1; justify-content: center; padding: 14px;"
+                    onclick="showRegisterModal()">
+                    注册账号
+                </button>
+            </div>
             <p id="loginError" style="color: var(--danger); margin-top: 16px; display: none; font-size: 14px;">
                 账号或密码错误，请重试
             </p>
+        </div>
+
+        <div id="registerModal" class="modal">
+            <div class="modal-content" style="max-width: 420px;">
+                <div class="modal-header">
+                    <h3 class="modal-title">注册账号</h3>
+                    <span class="close-btn" onclick="closeRegisterModal()">&times;</span>
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label style="display:block; text-align:left; margin-bottom:8px;">账号</label>
+                    <input type="text" id="registerUsername" placeholder="请输入账号">
+                </div>
+                <div style="margin-bottom: 14px;">
+                    <label style="display:block; text-align:left; margin-bottom:8px;">密码</label>
+                    <input type="password" id="registerPassword" placeholder="请输入密码"
+                        onkeyup="if(event.key === 'Enter') registerAccount()">
+                </div>
+                <p style="color: var(--text-secondary); margin: 0 0 12px 0; font-size: 12px; text-align: left;">
+                    账号: 4-20位字母/数字/下划线，且以字母开头；密码: 8-32位，需含大小写字母、数字、特殊字符
+                </p>
+                <p id="registerError" style="color: var(--danger); margin: 0 0 12px 0; display: none; font-size: 13px;"></p>
+                <div style="text-align: right;">
+                    <button class="btn btn-danger" onclick="closeRegisterModal()" style="margin-right: 8px;">取消</button>
+                    <button class="btn btn-primary" onclick="registerAccount()">注册并登录</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -115,7 +147,7 @@
             <div class="main-content">
                 <div class="top-bar">
                     <div class="page-title">管理控制台</div>
-                    <div class="user-info">
+                    <div class="user-info" onclick="showChangePasswordModal()">
                         <span>Admin</span>
                         <div class="avatar">A</div>
                     </div>
@@ -272,6 +304,34 @@
                 <span class="close-btn" onclick="closeSubscriptionModal()">&times;</span>
             </div>
             <div id="subscriptionModalBody"></div>
+        </div>
+    </div>
+
+    <div id="changePasswordModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <div class="modal-header">
+                <h3 class="modal-title">修改密码</h3>
+                <span class="close-btn" onclick="closeChangePasswordModal()">&times;</span>
+            </div>
+            <div style="margin-bottom: 14px;">
+                <label style="display:block; text-align:left; margin-bottom:8px;">账号</label>
+                <input type="text" id="changePasswordUsername" readonly>
+            </div>
+            <div style="margin-bottom: 14px;">
+                <label style="display:block; text-align:left; margin-bottom:8px;">新密码</label>
+                <input type="password" id="changePasswordInput" placeholder="请输入新密码"
+                    onkeyup="if(event.key === 'Enter') submitChangePassword()">
+            </div>
+            <p style="color: var(--text-secondary); margin: 0 0 12px 0; font-size: 12px; text-align: left;">
+                密码需为8-32位，且包含大写字母、小写字母、数字、特殊字符
+            </p>
+            <p id="changePasswordError"
+                style="color: var(--danger); margin: 0 0 12px 0; display: none; font-size: 13px;"></p>
+            <div style="text-align: right;">
+                <button class="btn btn-danger" onclick="closeChangePasswordModal()"
+                    style="margin-right: 8px;">取消</button>
+                <button class="btn btn-primary" onclick="submitChangePassword()">保存</button>
+            </div>
         </div>
     </div>
 
