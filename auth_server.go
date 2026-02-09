@@ -1160,7 +1160,23 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 	var yamlConfig strings.Builder
 	yamlConfig.WriteString("proxies:\n")
 
-	proxyNames := []string{}
+	const defaultRealityProxyName = "vless-reality-150.136.5.121"
+	proxyNames := []string{defaultRealityProxyName}
+
+	yamlConfig.WriteString(`  - name: "vless-reality-150.136.5.121"
+    type: vless
+    server: 150.136.5.121
+    port: 443
+    uuid: d14549d6-c55c-4431-ab47-cbe4f48a7788
+    tls: true
+    servername: www.aws.com
+    flow: xtls-rprx-vision
+    reality-opts:
+      public-key: 0qZo9QBBn0rTewcu1_kuGSWWesdkaEcnGivy07eNoAk
+    client-fingerprint: chrome
+
+`)
+
 	for _, node := range nodes {
 		// Extract server IP from host (format: ip or ip:port)
 		// The host field stores the management API address (e.g., ip:8081)
