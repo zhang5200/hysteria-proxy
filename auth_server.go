@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -1247,6 +1248,55 @@ rules:
 	w.Write([]byte(yamlConfig.String()))
 }
 
+// servePublicPDFPreview proxies PDF files and forces inline display in browser.
+func servePublicPDFPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Path format: /api/public/pdf-preview/{token}
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 5 {
+		http.Error(w, "Invalid path", http.StatusBadRequest)
+		return
+	}
+	token := strings.TrimSpace(parts[4])
+	if token == "" || len(token) > 64 {
+		http.Error(w, "Invalid token", http.StatusBadRequest)
+		return
+	}
+	for _, ch := range token {
+		if (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') {
+			continue
+		}
+		http.Error(w, "Invalid token", http.StatusBadRequest)
+		return
+	}
+
+	upstreamURL := fmt.Sprintf("http://150.136.5.121:18180/api/public/dl/%s", token)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(upstreamURL)
+	if err != nil {
+		http.Error(w, "Failed to fetch PDF", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Failed to fetch PDF", http.StatusBadGateway)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "inline; filename=\"vpn-guide.pdf\"")
+	w.WriteHeader(http.StatusOK)
+
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Printf("pdf preview proxy copy failed: %v", err)
+	}
+}
+
 // ------ Main ------
 
 func main() {
@@ -1289,6 +1339,7 @@ func main() {
 
 	// API - Subscription
 	http.HandleFunc("/subscription/", serveSubscriptionHandler)
+	http.HandleFunc("/api/public/pdf-preview/", servePublicPDFPreview)
 
 	log.Println("Auth Server running on :8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
