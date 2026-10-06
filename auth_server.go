@@ -48,6 +48,7 @@ type User struct {
 	Password  string    `json:"password"`
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt *int64    `json:"expires_at"`
 	// Traffic stats (merged from Hysteria)
 	Tx int64 `json:"tx"`
 	Rx int64 `json:"rx"`
@@ -139,6 +140,9 @@ func initDB() {
 
 	// Initialize admin table
 	initAdminTable()
+	if err := initMembership(); err != nil {
+		log.Fatal(err)
+	}
 
 	log.Println("Database initialized successfully")
 }
@@ -150,6 +154,7 @@ func upgradeSchema() {
 		name       string
 		definition string
 	}{
+		{"expires_at", "ALTER TABLE users ADD COLUMN expires_at INTEGER DEFAULT NULL"},
 		{"traffic_limit", "ALTER TABLE users ADD COLUMN traffic_limit INTEGER DEFAULT 0"},
 		{"auto_disable_on_limit", "ALTER TABLE users ADD COLUMN auto_disable_on_limit BOOLEAN DEFAULT 1"},
 		{"subscription_token", "ALTER TABLE users ADD COLUMN subscription_token TEXT"},
@@ -214,8 +219,9 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 	var enabled bool
 	var trafficLimit int64
 	var autoDisable bool
+	var expiresAt sql.NullInt64
 
-	err := db.QueryRow("SELECT password, enabled, traffic_limit, auto_disable_on_limit FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled, &trafficLimit, &autoDisable)
+	err := db.QueryRow("SELECT password, enabled, traffic_limit, auto_disable_on_limit, expires_at FROM users WHERE username = ?", username).Scan(&storedPassword, &enabled, &trafficLimit, &autoDisable, &expiresAt)
 	if err == sql.ErrNoRows {
 		log.Printf("User not found: %s", username)
 		http.Error(w, "User not found", http.StatusUnauthorized)
@@ -226,7 +232,7 @@ func authHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !enabled {
+	if !enabled || (expiresAt.Valid && expiresAt.Int64 <= time.Now().Unix()) {
 		log.Printf("User disabled: %s", username)
 		http.Error(w, "User is disabled", http.StatusForbidden)
 		return
@@ -367,7 +373,7 @@ func userDetailHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUsers(w http.ResponseWriter, r *http.Request, reqUser *RequestUser) {
-	query := "SELECT id, username, password, enabled, created_at, traffic_limit, auto_disable_on_limit FROM users"
+	query := "SELECT id, username, password, enabled, created_at, traffic_limit, auto_disable_on_limit, expires_at FROM users"
 	var rows *sql.Rows
 	var err error
 	if reqUser.Role == "admin" {
@@ -384,7 +390,7 @@ func getUsers(w http.ResponseWriter, r *http.Request, reqUser *RequestUser) {
 	users := []User{}
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.Enabled, &u.CreatedAt, &u.TrafficLimit, &u.AutoDisableOnLimit); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Password, &u.Enabled, &u.CreatedAt, &u.TrafficLimit, &u.AutoDisableOnLimit, &u.ExpiresAt); err != nil {
 			continue
 		}
 		users = append(users, u)
@@ -457,7 +463,7 @@ func createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	// AutoDisableOnLimit defaults to true from struct or can be set by client
 
-	_, err := db.Exec("INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit) VALUES (?, ?, ?, ?, ?)",
+	_, err := db.Exec("INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit, expires_at) VALUES (?, ?, ?, ?, ?, 0)",
 		u.Username, u.Password, 1, u.TrafficLimit, u.AutoDisableOnLimit)
 	if err != nil {
 		http.Error(w, "Failed to create user (username might indicate duplicate)", http.StatusInternalServerError)
@@ -1113,7 +1119,7 @@ func serveSubscriptionHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Get user by token
 	var username, password string
-	err := db.QueryRow("SELECT username, password FROM users WHERE subscription_token = ? AND enabled = 1", token).Scan(&username, &password)
+	err := db.QueryRow("SELECT username, password FROM users WHERE subscription_token = ? AND enabled = 1 AND (expires_at IS NULL OR expires_at > ?)", token, time.Now().Unix()).Scan(&username, &password)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Invalid or expired subscription", http.StatusNotFound)
 		return
@@ -1318,6 +1324,10 @@ func main() {
 
 	// API - Login
 	http.HandleFunc("/api/login", loginHandler)
+	http.HandleFunc("/api/logout", logoutHandler)
+	http.HandleFunc("/api/membership", membershipHandler)
+	http.HandleFunc("/api/cards", cardsHandler)
+	http.HandleFunc("/api/redeem", redeemHandler)
 	http.HandleFunc("/api/register", registerHandler)
 	http.HandleFunc("/api/change-password", changePasswordHandler)
 
@@ -1341,6 +1351,10 @@ func main() {
 	http.HandleFunc("/subscription/", serveSubscriptionHandler)
 	http.HandleFunc("/api/public/pdf-preview/", servePublicPDFPreview)
 
-	log.Println("Auth Server running on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	address := os.Getenv("AUTH_LISTEN_ADDR")
+	if address == "" {
+		address = ":8080"
+	}
+	log.Printf("Auth Server running on %s", address)
+	log.Fatal(http.ListenAndServe(address, nil))
 }

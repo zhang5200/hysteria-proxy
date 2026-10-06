@@ -184,6 +184,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := createSession(w, r, req.Username); err != nil {
+		http.Error(w, "登录失败，请重试", 500)
+		return
+	}
+
 	// 登录成功
 	log.Printf("User %s logged in successfully with role: %s", req.Username, role)
 	w.Header().Set("Content-Type", "application/json")
@@ -256,7 +261,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := tx.Exec(
-		"INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit) VALUES (?, ?, ?, ?, ?)",
+		"INSERT INTO users (username, password, enabled, traffic_limit, auto_disable_on_limit, expires_at) VALUES (?, ?, ?, ?, ?, 0)",
 		req.Username, req.Password, 1, defaultRegisterTrafficLimitBytes, true,
 	); err != nil {
 		http.Error(w, "Failed to create default user", http.StatusInternalServerError)
@@ -275,16 +280,12 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getRequestUser(r *http.Request) (*RequestUser, error) {
-	username := strings.TrimSpace(r.Header.Get("X-Auth-Username"))
-	if username == "" {
-		return nil, http.ErrNoCookie
+	cookie, err := r.Cookie("hysteria_session")
+	if err != nil {
+		return nil, err
 	}
-
-	var role string
-	err := db.QueryRow("SELECT role FROM admin_users WHERE username = ?", username).Scan(&role)
-	if err == sql.ErrNoRows {
-		return nil, sql.ErrNoRows
-	}
+	var username, role string
+	err = db.QueryRow(`SELECT a.username, a.role FROM sessions s JOIN admin_users a ON a.username = s.username WHERE s.token = ? AND s.expires_at > ?`, hashPassword(cookie.Value), time.Now().Unix()).Scan(&username, &role)
 	if err != nil {
 		return nil, err
 	}

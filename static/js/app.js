@@ -47,12 +47,6 @@ function apiFetch(url, options = {}) {
   const { includeAuth = true, ...fetchOptions } = options;
   const headers = new Headers(fetchOptions.headers || {});
 
-  if (includeAuth) {
-    const username = sessionStorage.getItem("username");
-    if (username) {
-      headers.set("X-Auth-Username", username);
-    }
-  }
 
   return fetch(url, {
     ...fetchOptions,
@@ -85,6 +79,7 @@ async function checkLogin() {
       setTimeout(() => {
         document.getElementById("login-overlay").style.display = "none";
         document.getElementById("mainApp").style.opacity = "1";
+      document.getElementById("mainApp").inert = false;
       }, 300);
       sessionStorage.setItem("isLoggedIn", "true");
       sessionStorage.setItem("userRole", data.role);
@@ -95,11 +90,7 @@ async function checkLogin() {
       updateUIForRole(data.role);
       
       // Load initial data
-      if (data.role === "admin") {
-        refreshUsers();
-      } else {
-        switchTab("users");
-      }
+      switchTab("overview");
     } else {
       // Fail
       error.textContent = data.message || "账号或密码错误，请重试";
@@ -277,7 +268,8 @@ async function submitChangePassword() {
   }
 }
 
-function logout() {
+async function logout() {
+  try { await apiFetch("/api/logout", { method: "POST" }); } catch { alert("退出失败，请检查网络后重试"); return; }
   sessionStorage.removeItem("isLoggedIn");
   sessionStorage.removeItem("userRole");
   sessionStorage.removeItem("username");
@@ -318,13 +310,10 @@ window.addEventListener("load", () => {
     currentUserRole = role;
     document.getElementById("login-overlay").style.display = "none";
     document.getElementById("mainApp").style.opacity = "1";
+      document.getElementById("mainApp").inert = false;
     updateUIForRole(role);
     
-    if (role === "admin") {
-      refreshUsers();
-    } else {
-      switchTab("users");
-    }
+    switchTab("overview");
   }
 });
 
@@ -542,6 +531,7 @@ function renderUsers() {
                 }">${user.enabled ? "启用" : "禁用"}</span>
             </div>
             
+            <div class="card-row"><span>使用有效期</span><span>${user.expires_at === null ? "不限时（原有账户）" : user.expires_at ? new Date(user.expires_at * 1000).toLocaleDateString("zh-CN") : "待兑换激活"}</span></div>
             <div class="card-row">
                 <span>总流量:</span>
                 <span style="font-family: monospace;">
@@ -595,7 +585,7 @@ function renderUsers() {
 
 function showSubscriptionModal(userId) {
   const user = users.find((u) => u.id === userId);
-  const username = user ? user.username : "";
+  const username = user ? user.username : (sessionStorage.getItem("username") || "");
   currentSubscriptionUserId = userId;
   currentSubscriptionUsername = username;
 

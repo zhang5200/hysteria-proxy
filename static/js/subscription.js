@@ -203,19 +203,3 @@ async function regenerateToken(userId) {
         alert('生成失败');
     }
 }
-
-// Refresh visible subscription QR when system theme changes.
-const themeMedia = window.matchMedia('(prefers-color-scheme: dark)');
-const refreshThemeSensitiveSubscription = () => {
-    if (typeof currentSubscriptionUserId !== 'undefined' &&
-        currentSubscriptionUserId &&
-        typeof loadSubscriptionForUser === 'function') {
-        loadSubscriptionForUser(currentSubscriptionUserId);
-    }
-};
-
-if (themeMedia.addEventListener) {
-    themeMedia.addEventListener('change', refreshThemeSensitiveSubscription);
-} else if (themeMedia.addListener) {
-    themeMedia.addListener(refreshThemeSensitiveSubscription);
-}
